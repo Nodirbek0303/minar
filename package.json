@@ -1,0 +1,36 @@
+{
+  "name": "arxiai-platform",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ArxAI — AI yordamchili qurilish chizmalari va 5D hisob-kitob platformasi",
+  "scripts": {
+    "dev": "concurrently -k -n server,web \"npm:dev:server\" \"npm:dev:web\"",
+    "dev:server": "node server/index.js",
+    "dev:web": "vite",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "concurrently": "^9.1.0",
+    "cors": "^2.8.5",
+    "dxf-parser": "^1.1.2",
+    "express": "^4.21.2",
+    "multer": "^2.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.1.1",
+    "three": "^0.170.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "vite": "^5.4.11"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-linux-x64-gnu": "^4.63.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
