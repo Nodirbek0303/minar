@@ -11,6 +11,7 @@ export default function FacadeDetail() {
   const rotatingRef = useRef(false);
   const [explode, setExplode] = useState(0);
   const [rotating, setRotating] = useState(false);
+  const [glError, setGlError] = useState('');
 
   useEffect(() => { explodeRef.current = explode; }, [explode]);
   useEffect(() => { rotatingRef.current = rotating; }, [rotating]);
@@ -24,7 +25,13 @@ export default function FacadeDetail() {
     const camera = new THREE.PerspectiveCamera(45, mount.clientWidth / mount.clientHeight, 0.01, 100);
     camera.position.set(3.2, 1.6, 3.2);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+    } catch (e) {
+      setGlError(e.message || 'WebGL kontekstini yaratib bo‘lmadi');
+      return;
+    }
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mount.appendChild(renderer.domElement);
@@ -193,7 +200,16 @@ export default function FacadeDetail() {
   return (
     <div>
       <div className="viewer-wrap" style={{ height: 480 }}>
-        <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+        {glError ? (
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', height: '100%' }}>
+            <b>🖥 3D maketni chizib bo'lmadi</b>
+            <span className="small-muted">
+              Brauzerda WebGL ishlamayapti: {glError}<br />
+              Brauzer sozlamalarida apparat tezlashtirishni (hardware acceleration) yoqing yoki boshqa brauzerda oching.
+            </span>
+          </div>
+        ) : null}
+        <div ref={mountRef} style={{ width: '100%', height: '100%', display: glError ? 'none' : 'block' }} />
       </div>
       <div className="timeline-panel">
         <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>

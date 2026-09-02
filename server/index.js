@@ -264,9 +264,32 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ error: err?.message || 'Server xatosi' });
 });
 
+// ---------- Eski loyihalarni yangi hisob dvigateliga ko'chirish ----------
+// Avvalgi versiyalarda maydon bir yuzada hisoblangan, TU va arenda yo'q edi.
+// Saqlangan loyihalar birinchi ishga tushirishda qayta hisoblanadi.
+function migrateProjects() {
+  let n = 0;
+  for (const p of db.listProjects()) {
+    if (p.quantities?.faces === 2) continue; // allaqachon yangi dvigatel
+    try {
+      p.plan = validatePlan(p.plan || samplePlan());
+      p.opts = { rentMode: 'buy', rentMonths: 1, ...validateOpts(p.opts || {}) };
+      p.priceOverrides = validatePriceOverrides(p.priceOverrides);
+      recalcProject(p);
+      db.saveProject(p);
+      n++;
+    } catch (e) {
+      console.warn(`[migratsiya] "${p.name}" qayta hisoblanmadi: ${e.message}`);
+    }
+  }
+  if (n) console.log(`  Migratsiya: ${n} ta loyiha yangi hisob bo'yicha qayta hisoblandi`);
+}
+
 const PORT = Number(process.env.PORT) || 3001;
 // Parol berilmagan bo'lsa server ochiq tarmoqqa chiqmaydi.
 const HOST = process.env.HOST || (authEnabled() ? '0.0.0.0' : '127.0.0.1');
+
+migrateProjects();
 
 export const server = process.env.NODE_ENV === 'test' ? null : app.listen(PORT, HOST, () => {
   console.log(`ArxAI server: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);

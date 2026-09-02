@@ -92,6 +92,7 @@ export default function Viewer5D({ project }) {
   const [day, setDay] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [selFloor, setSelFloor] = useState(null); // null = barchasi
+  const [glError, setGlError] = useState('');
   const selFloorRef = useRef(null);
   const totalDays = project.schedule?.totalDays || 1;
   const phases = project.schedule?.phases || [];
@@ -114,7 +115,15 @@ export default function Viewer5D({ project }) {
     scene.fog = new THREE.Fog(0x0a0f18, 80, 220);
 
     const camera = new THREE.PerspectiveCamera(50, mount.clientWidth / mount.clientHeight, 0.1, 600);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    // WebGL bo'lmasa (eski qurilma, apparat tezlashtirish o'chirilgan, masofaviy ish stoli)
+    // butun sahifa qulamasligi kerak — faqat shu bo'lim o'rniga xabar chiqadi
+    let renderer;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+    } catch (e) {
+      setGlError(e.message || 'WebGL kontekstini yaratib bo‘lmadi');
+      return;
+    }
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.xr.enabled = true;
@@ -601,7 +610,17 @@ export default function Viewer5D({ project }) {
   return (
     <div>
       <div className="viewer-wrap" style={{ height: 540 }}>
-        <div ref={mountRef} style={{ width: '100%', height: '100%' }} />
+        {glError ? (
+          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', height: '100%' }}>
+            <b>🖥 3D ko'rinishni chizib bo'lmadi</b>
+            <span className="small-muted">
+              Brauzerda WebGL ishlamayapti: {glError}<br />
+              Brauzer sozlamalarida apparat tezlashtirishni (hardware acceleration) yoqing yoki boshqa brauzerda oching.
+              Hisob-kitob va spetsifikatsiya "Materiallar va narx" bo'limida to'liq ishlaydi.
+            </span>
+          </div>
+        ) : null}
+        <div ref={mountRef} style={{ width: '100%', height: '100%', display: glError ? 'none' : 'block' }} />
         <div className="viewer-hud">
           <div className="hud-card">
             <div className="v">{shownDay} / {totalDays} kun</div>
