@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeQuantities, computeBOQ, computeSchedule, computeFloorSummary, normalizeFloors,
-  applyFormworkScheme, buildFloors, DEFAULT_RATES
+  applyFormworkScheme, buildFloors, computeVariants, DEFAULT_RATES
 } from '../server/lib/calc.js';
 import { samplePlan } from '../server/lib/samplePlan.js';
 
@@ -243,4 +243,57 @@ test('hujjatda podval topilmasa qoida bo\'yicha qo\'shiladi va belgilanadi', () 
   assert.equal(g.filter((x) => x.underground).length, 1);
   assert.equal(g[0].addedByRule, undefined);
   assert.equal(g[0].height, 2.5, 'hujjatdagi balandlik saqlanadi');
+});
+
+test('IKKI VARIANT: melki va krupny alohida to\'liq hisoblanadi', () => {
+  const v = computeVariants(samplePlan(), {});
+  for (const id of ['melki', 'krupny']) {
+    assert.ok(v[id], id + ' varianti bo\'lishi kerak');
+    assert.ok(v[id].boq.rows.length > 10, id + ': pozitsiyalar');
+    assert.ok(v[id].quantities.panelCount > 0, id + ': panellar');
+    assert.ok(v[id].boq.total > 0, id + ': summa');
+    assert.equal(v[id].schedule.totalDays >= 1, true);
+  }
+  // Panel nomlari tizimga mos
+  assert.ok(v.melki.boq.rows.some((r) => r.name.startsWith('КМО (Щит)')), 'melki → КМО');
+  assert.ok(v.krupny.boq.rows.some((r) => r.name.startsWith('ЩЛ')), 'krupny → ЩЛ');
+  assert.ok(!v.melki.boq.rows.some((r) => r.name.startsWith('ЩЛ')), 'melki da ЩЛ bo\'lmasligi kerak');
+  assert.ok(!v.krupny.boq.rows.some((r) => r.name.startsWith('КМО')), 'krupny da КМО bo\'lmasligi kerak');
+  // Devor yuzasi bir xil, lekin PANEL BILAN YOPILGAN yuza farq qilishi mumkin:
+  // katta panellar tor joylarga sig'maydi, u yerlar proyom qutisi bilan yopiladi
+  const diff = Math.abs(v.melki.quantities.facadeArea - v.krupny.quantities.facadeArea);
+  assert.ok(diff / v.melki.quantities.facadeArea < 0.1, `yuza farqi juda katta: ${diff} m2`);
+  assert.ok(v.krupny.quantities.skippedArea >= v.melki.quantities.skippedArea,
+    'katta panellarda yopilmagan yuza kamaymasligi kerak');
+  // Kichik panellar bilan panel soni ko'proq bo'ladi
+  assert.ok(v.melki.quantities.panelCount > v.krupny.quantities.panelCount,
+    `melki ${v.melki.quantities.panelCount} > krupny ${v.krupny.quantities.panelCount}`);
+});
+
+test('IKKI VARIANT: taqqoslash jadvali to\'g\'ri', () => {
+  const v = computeVariants(samplePlan(), {});
+  const c = v.comparison;
+  assert.equal(c.panels.melki, v.melki.quantities.panelCount);
+  assert.equal(c.panels.krupny, v.krupny.quantities.panelCount);
+  assert.equal(c.total.melki, v.melki.boq.total);
+  assert.equal(c.total.krupny, v.krupny.boq.total);
+  assert.ok(['melki', 'krupny'].includes(c.total.cheaper));
+  assert.equal(c.total.cheaper, c.total.melki <= c.total.krupny ? 'melki' : 'krupny');
+  assert.ok(c.weight.melki > 0 && c.weight.krupny > 0, 'og\'irlik hisoblanishi kerak');
+});
+
+test('IKKI VARIANT: qavat qoidasi ikkalasida ham amal qiladi', () => {
+  const v = computeVariants(samplePlan(), {});
+  for (const id of ['melki', 'krupny']) {
+    const on = v[id].floorSummary.filter((f) => f.rows > 0).map((f) => f.name);
+    assert.deepEqual(on, ['Podval', '1-qavat'], id + ': faqat podval va 1-qavat');
+  }
+});
+
+test('IKKI VARIANT: arenda rejimi ikkalasiga ham qo\'llanadi', () => {
+  const buy = computeVariants(samplePlan(), { rent: false });
+  const rent = computeVariants(samplePlan(), { rent: true, rentMonths: 2 });
+  for (const id of ['melki', 'krupny']) {
+    assert.ok(rent[id].boq.total < buy[id].boq.total, id + ': arenda arzonroq');
+  }
 });

@@ -9,7 +9,8 @@ import { analyzeDxf, UNIT_FACTORS } from './lib/dxf.js';
 import { samplePlan } from './lib/samplePlan.js';
 import {
   computeQuantities, computeBOQ, computeSchedule, computeFloorSummary, DEFAULT_RATES,
-  buildFloors, applyFormworkScheme, FORMWORK_SCHEMES
+  buildFloors, applyFormworkScheme, FORMWORK_SCHEMES,
+  computeVariants, VARIANTS, DEFAULT_VARIANT
 } from './lib/calc.js';
 import { analyzeImage, analyzeDocuments, chatAssistant, aiEnabled, aiProvider, supportsNativePdf } from './lib/ai.js';
 import {
@@ -280,32 +281,25 @@ app.get('/api/capabilities', async (req, res) => {
 
 // ---------- Projects ----------
 function recalcProject(p) {
-  const rent = p.opts?.rentMode === 'rent';
-  const q = computeQuantities(p.plan, {
+  const opts = {
     rates: p.rates || {},
-    rent,
-    rentMonths: p.opts?.rentMonths || 1
-  });
-  const boq = computeBOQ(q.items, p.rates || {});
-  // Qo'lda kiritilgan narxlar (har qator uchun override) — hisoblangan narxni almashtiradi
-  if (p.priceOverrides && Object.keys(p.priceOverrides).length) {
-    for (const row of boq.rows) {
-      const ov = p.priceOverrides[row.key];
-      if (ov === undefined || ov === null) continue;
-      const n = Number(ov);
-      if (!Number.isFinite(n)) continue;
-      row.matRate = n;
-      row.matCost = Math.round(row.qty * n);
-      row.total = row.matCost + row.laborCost;
-    }
-    boq.total = boq.rows.reduce((s, x) => s + x.total, 0);
-    boq.totalMat = boq.rows.reduce((s, x) => s + x.matCost, 0);
-    boq.totalLabor = boq.rows.reduce((s, x) => s + x.laborCost, 0);
-  }
-  p.quantities = q.quantities;
-  p.boq = boq;
-  p.schedule = computeSchedule(q.quantities, boq);
-  p.floorSummary = computeFloorSummary(boq, q.quantities.perFloor);
+    rent: p.opts?.rentMode === 'rent',
+    rentMonths: p.opts?.rentMonths || 1,
+    priceOverrides: p.priceOverrides || {}
+  };
+  // Ikkala tizim (мелкощитовая va крупнощитовая) TO'LIQ va alohida hisoblanadi
+  const v = computeVariants(p.plan, opts);
+  p.variants = { melki: v.melki, krupny: v.krupny };
+  p.comparison = v.comparison;
+
+  // Tanlangan variant — bosh ko'rsatkichlar, 5D va PDF shundan oladi
+  const sel = VARIANTS[p.variant] ? p.variant : DEFAULT_VARIANT;
+  p.variant = sel;
+  const chosen = p.variants[sel];
+  p.quantities = chosen.quantities;
+  p.boq = chosen.boq;
+  p.schedule = chosen.schedule;
+  p.floorSummary = chosen.floorSummary;
   p.updatedAt = new Date().toISOString();
   return p;
 }
@@ -328,6 +322,7 @@ app.post('/api/projects', (req, res, next) => {
       rates: {},
       priceOverrides: {},
       opts: { ...validateOpts({ wallMaterial }), rentMode: 'buy', rentMonths: 1 },
+      variant: VARIANTS[req.body?.variant] ? req.body.variant : DEFAULT_VARIANT,
       createdAt: new Date().toISOString()
     };
     recalcProject(p);
@@ -342,6 +337,7 @@ app.get('/api/projects', (req, res) => {
     facadeArea: p.quantities?.facadeArea,
     wallCount: p.plan?.walls?.length,
     floorCount: p.quantities?.floorCount,
+    variant: p.variant,
     total: p.boq?.total
   })));
 });
@@ -356,7 +352,8 @@ app.put('/api/projects/:id', (req, res, next) => {
   try {
     const p = db.getProject(req.params.id);
     if (!p) return res.status(404).json({ error: 'Loyiha topilmadi' });
-    const { rates, opts, name, plan, priceOverrides } = req.body || {};
+    const { rates, opts, name, plan, priceOverrides, variant } = req.body || {};
+    if (variant && VARIANTS[variant]) p.variant = variant;
     if (rates) p.rates = { ...p.rates, ...validateRates(rates) };
     if (opts) p.opts = { ...p.opts, ...validateOpts(opts) };
     if (name) p.name = String(name).slice(0, 80);
@@ -390,6 +387,7 @@ app.put('/api/projects/:id/floors', (req, res, next) => {
 
 app.get('/api/sample-plan', (req, res) => res.json({ plan: samplePlan() }));
 app.get('/api/rates-defaults', (req, res) => res.json({ rates: DEFAULT_RATES }));
+app.get('/api/variants', (req, res) => res.json({ variants: VARIANTS, default: DEFAULT_VARIANT }));
 app.get('/api/ai-status', (req, res) => res.json({ enabled: aiEnabled() }));
 
 // ---------- AI chat ----------
@@ -471,7 +469,7 @@ app.use((err, req, res, _next) => {
 function migrateProjects() {
   let n = 0;
   for (const p of db.listProjects()) {
-    if (p.quantities?.faces === 2) continue; // allaqachon yangi dvigatel
+    if (p.quantities?.faces === 2 && p.variants) continue; // allaqachon yangi dvigatel
     try {
       p.plan = validatePlan(p.plan || samplePlan());
       p.opts = { rentMode: 'buy', rentMonths: 1, ...validateOpts(p.opts || {}) };

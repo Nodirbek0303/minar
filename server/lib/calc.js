@@ -282,6 +282,112 @@ export function computeQuantities(plan, opts = {}) {
   return { quantities, items, floors };
 }
 
+// ============================================================
+//  IKKI VARIANT: мелкощитовая va крупнощитовая
+//
+//  Bitta loyiha uchun ikkala tizim TO'LIQ va ALOHIDA hisoblanadi —
+//  mijoz taqqoslab tanlaydi. Tanlangan variant bosh ko'rsatkichlarga,
+//  5D ko'rinishga va PDF ga tushadi.
+// ============================================================
+export const VARIANTS = {
+  melki: {
+    id: 'melki',
+    fwType: 'msho',
+    title: 'Мелкощитовая',
+    subtitle: 'КМО (Щит) — mayda shtitli qolip',
+    hint: 'Kichik panellar: 200–600 × 300–1500 mm. Qo‘lda ko‘tariladi, murakkab shakllarga mos, lekin pozitsiya va zamok ko‘p.',
+    color: '#f5a623'
+  },
+  krupny: {
+    id: 'krupny',
+    fwType: 'ksho',
+    title: 'Крупнощитовая',
+    subtitle: 'ЩЛ — katta shtitli qolip',
+    hint: 'Katta panellar: 200–1200 × 1200–3300 mm. Kran bilan o‘rnatiladi, montaj tez, chok kam.',
+    color: '#2f81f7'
+  }
+};
+
+export const DEFAULT_VARIANT = 'melki';
+
+// Rejadagi barcha qavatlarni bitta panel tizimiga o'tkazish
+function planWithType(plan, fwType) {
+  const floors = normalizeFloors(plan).map((f) => ({
+    ...f,
+    formwork: { type: fwType, color: f.formwork?.color || 'RAL3020' }
+  }));
+  return { ...plan, floors };
+}
+
+// Bitta variantni to'liq hisoblash
+export function computeVariant(plan, variantId, opts = {}) {
+  const v = VARIANTS[variantId] || VARIANTS[DEFAULT_VARIANT];
+  const q = computeQuantities(planWithType(plan, v.fwType), opts);
+  const boq = computeBOQ(q.items, opts.rates || {});
+  applyPriceOverrides(boq, opts.priceOverrides);
+  return {
+    id: v.id,
+    title: v.title,
+    subtitle: v.subtitle,
+    hint: v.hint,
+    color: v.color,
+    quantities: q.quantities,
+    boq,
+    schedule: computeSchedule(q.quantities, boq),
+    floorSummary: computeFloorSummary(boq, q.quantities.perFloor)
+  };
+}
+
+// Ikkala variant + taqqoslash
+export function computeVariants(plan, opts = {}) {
+  const melki = computeVariant(plan, 'melki', opts);
+  const krupny = computeVariant(plan, 'krupny', opts);
+  const cmp = (a, b, key) => {
+    const x = a, y = b;
+    return { melki: x, krupny: y, diff: +(y - x).toFixed(2), cheaper: x <= y ? 'melki' : 'krupny', key };
+  };
+  return {
+    melki,
+    krupny,
+    comparison: {
+      panels: cmp(melki.quantities.panelCount, krupny.quantities.panelCount, 'panel'),
+      rows: cmp(melki.boq.rows.length, krupny.boq.rows.length, 'pozitsiya'),
+      total: cmp(melki.boq.total, krupny.boq.total, "so'm"),
+      days: cmp(melki.schedule.totalDays, krupny.schedule.totalDays, 'kun'),
+      weight: cmp(totalWeight(melki.boq), totalWeight(krupny.boq), 'kg'),
+      area: melki.quantities.facadeArea
+    }
+  };
+}
+
+// Spetsifikatsiyadagi umumiy og'irlik (nomdagi "— N kg" dan)
+function totalWeight(boq) {
+  let sum = 0;
+  for (const r of boq.rows) {
+    const m = /—\s*([\d.]+)\s*kg/.exec(r.name);
+    if (m) sum += Number(m[1]) * r.qty;
+  }
+  return +sum.toFixed(1);
+}
+
+// Qo'lda kiritilgan narxlarni qo'llash
+export function applyPriceOverrides(boq, overrides) {
+  if (!overrides || !Object.keys(overrides).length) return boq;
+  for (const row of boq.rows) {
+    const ov = overrides[row.key];
+    if (ov === undefined || ov === null) continue;
+    const n = Number(ov);
+    if (!Number.isFinite(n)) continue;
+    row.matRate = n;
+    row.matCost = Math.round(row.qty * n);
+    row.total = row.matCost + row.laborCost;
+  }
+  boq.total = boq.rows.reduce((s, x) => s + x.total, 0);
+  boq.totalMat = boq.rows.reduce((s, x) => s + x.matCost, 0);
+  boq.totalLabor = boq.rows.reduce((s, x) => s + x.laborCost, 0);
+  return boq;
+}
+
 // ---------- Smetа ----------
 export function computeBOQ(items, userRates = {}) {
   const r = { ...DEFAULT_RATES, ...userRates };

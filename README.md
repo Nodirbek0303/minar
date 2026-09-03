@@ -13,6 +13,7 @@ Chizma yuklash → AI/geometrik tahlil → **MINAR qolip spetsifikatsiyasi va sm
 | 🏢 **Ko'p qavat** | Qavat qo'shish/o'chirish, balandlik; har qavat qolipi alohida yoqiladi/o'chiriladi va alohida hisoblanadi |
 | ⬇ **Apalka qoidasi** | Qavat soni qancha bo'lishidan **qat'i nazar** qolip faqat **podval va 1-qavatga** hisoblanadi. Yuqori qavatlar smetaga ham, 5D ko'rinishga ham kirmaydi |
 | 🔩 **MINAR qoliplari** | Real katalog: KSHO/MSHO panellari aniq o'lchamlarda devorga joylanadi (DP kombinatsiya), zamok/tyaga/klin/gayka, ustun qolipi, TU teleskopik ustunlar — 3D da real ko'rinishda (RAL ranglar) |
+| ⚖ **Ikki tizim taqqoslashi** | Bitta loyiha uchun **мелкощитовая (КМО)** va **крупнощитовая (ЩЛ)** to'liq va alohida hisoblanadi; taqqoslash jadvali (panel, og'irlik, muddat, summa) va har birining o'z bo'limi + oraliq jami. Tanlangan variant bosh ko'rsatkichlarga, 5D ga va PDF ga tushadi |
 | 💰 **Sotib olish / arenda** | Har pozitsiya uchun narx; arenda oylik tarif × oylar bo'yicha hisoblanadi; har qatorda narxni qo'lda kiritish mumkin |
 | 🏗 **5D ko'rish** | Ko'p qavatli 3D model vaqt jadvali bo'yicha qurilib boradi; qavat tanlash; PNG snapshot |
 | 🥽 **VR/AR** | WebXR (VR qo'lqoyni / ARCore telefon) — bino ichida yurish |
@@ -120,6 +121,18 @@ Spetsifikatsiyada nomlar **aynan katalogdagidek** chiqadi: `КМО (Щит) 600�
 narx **og'irlik × po'lat kg tarifi** bo'yicha chiqariladi (`minar_panel_kg`, arendada
 `qolip_panel_rent` × oylar). Har bir qator narxi "Materiallar va narx" bo'limida qo'lda
 kiritiladi. Katalogda og'irligi ko'rsatilmagan pozitsiyalar qatorida shu haqda yozuv chiqadi.
+
+## Ikki tizim: мелкощитовая va крупнощитовая
+
+| | Мелкощитовая | Крупнощитовая |
+|---|---|---|
+| Panel oilasi | **КМО (Щит)** — 45 o'lcham | **ЩЛ** — 88 o'lcham |
+| O'lchamlar | 200–600 × 300–1500 mm | 200–1200 × 1200–3300 mm |
+| Xususiyati | Qo'lda ko'tariladi, murakkab shakllarga mos; pozitsiya va zamok ko'p | Kran bilan o'rnatiladi, montaj tez, chok kam; tor joylarni yopolmaydi |
+
+Ikkalasi ham **to'liq alohida** hisoblanadi (`computeVariants`) — mijoz taqqoslab tanlaydi.
+Katta panellar tor joylarga sig'masa, o'sha yuza `skippedArea` da ko'rsatiladi (proyom qutisi
+bilan yopiladi). Narx qo'lda tahrirlansa faqat tanlangan variantga tegishli bo'ladi.
 
 ## Hisob me'yorlari
 
