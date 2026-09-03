@@ -277,48 +277,12 @@ export default function Viewer5D({ project }) {
               }
             }
             // Vertikal trubalar (48mm) — panellar birikmalarida, IKKI SHOxLI TIRGAKLAR bilan mahkamlanadi
-            const nT = Math.max(1, Math.ceil(len / FORMWORK_NORMS.TRUBA_V_STEP_M));
-            // gorizontal truba qatorlari — spetsifikatsiyadagi bilan bir xil soni va qadami
-            const horizRows = Math.max(1, Math.round(H / FORMWORK_NORMS.TRUBA_H_ROW_STEP_M));
+            // Tekislovchi balka (Балка выравнивающая) qatorlari — spetsifikatsiya bilan bir xil
+            const horizRows = Math.max(1, Math.round(H / FORMWORK_NORMS.BEAM_ROW_STEP_M));
             const boundaries = [];
             for (let i = 0; i < horizRows; i++) boundaries.push((i + 0.5) * (H / horizRows));
             const tubeOff = extSign * (w.thickness / 2 + 0.035 + 0.055 + 0.035);
-            {
-              const tubeGeo = track(new THREE.CylinderGeometry(0.031, 0.031, H + 0.06, 12));
-              const tubeMat = new THREE.MeshStandardMaterial({ color: 0x55575c, metalness: 0.75, roughness: 0.3, transparent: true });
-              const bodyGeo = track(new THREE.BoxGeometry(0.1, 0.095, 0.08));
-              const prongGeo = track(new THREE.BoxGeometry(0.026, 0.08, 0.075));
-              const clampMat = new THREE.MeshStandardMaterial({ color: colorHex, metalness: 0.45, roughness: 0.45, transparent: true });
-              const clampZ = -extSign * 0.062; // tirgak shoxlari panel tomonga
-              for (let i = 0; i <= nT; i++) {
-                const tx = i * (len / nT);
-                const tp = a.clone().add(u.clone().multiplyScalar(tx));
-                // truba
-                const tube = new THREE.Mesh(tubeGeo, track(tubeMat.clone()));
-                tube.position.set(tp.x, elev + H / 2, tp.z).add(n.clone().multiplyScalar(tubeOff));
-                tube.rotation.y = -ang;
-                tube.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi };
-                scene.add(tube);
-                panelMeshes.push(tube);
-                // ikki shoxli tirgak: korpus + 2 shox (har panel qatori chegarasida)
-                for (const by of boundaries) {
-                  const base = tp.clone().add(n.clone().multiplyScalar(tubeOff));
-                  const mk = (geo, mat, ox, oz) => {
-                    const m = new THREE.Mesh(geo, track(mat.clone()));
-                    const lp = new THREE.Vector3(ox, 0, oz).applyEuler(new THREE.Euler(0, -ang, 0));
-                    m.position.set(base.x + lp.x, elev + by, base.z + lp.z);
-                    m.rotation.y = -ang;
-                    m.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi };
-                    scene.add(m);
-                    panelMeshes.push(m);
-                  };
-                  mk(bodyGeo, clampMat, 0, 0);
-                  mk(prongGeo, clampMat, 0.055, clampZ);
-                  mk(prongGeo, clampMat, -0.055, clampZ);
-                }
-              }
-            }
-            // Gorizontal trubalar (48mm) — har panel qatori chegarasida bo'ylab
+            // Tekislovchi balkalar — har qatorda devor bo'ylab (katalog: Балка выравнивающая)
             {
               const hLen = len + 0.24;
               const hGeo = track(new THREE.CylinderGeometry(0.031, 0.031, hLen, 12));
@@ -691,6 +655,7 @@ export default function Viewer5D({ project }) {
           <span><span className="dot" style={{ background: '#9c7a5b' }} />Devor (beton/g'isht)</span>
           <span><span className="dot" style={{ background: '#7ec8ff' }} />Oyna</span>
           <span><span className="dot" style={{ background: '#c22a1e' }} />MINAR qolip (apalka)</span>
+          <span><span className="dot" style={{ background: '#55575c' }} />Tekislovchi balka</span>
           <span><span className="dot" style={{ background: '#4a4a4e' }} />Tyaga (tayrot)</span>
         </div>
         <p className="small-muted" style={{ marginTop: 8 }}>

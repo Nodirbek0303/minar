@@ -295,8 +295,10 @@ export function computeBOQ(items, userRates = {}) {
 export function computeFloorSummary(boq, perFloor) {
   const FACADE_KEYS = new Set([
     'apalka', 'fasad_ish', 'izolyatsiya', 'tirgak', 'anker', 'gayka', 'shayba', 'profil', 'klemmer',
-    'qolip_panel', 'qolip_zamok', 'qolip_klin', 'qolip_tyaga', 'qolip_gayka', 'qolip_ushlagich',
-    'qolip_brace', 'qolip_truba_v', 'qolip_truba_h', 'qolip_tu', 'qolip_uchoyoq', 'qolip_univilka', 'qolip_ustun'
+    'qolip_panel', 'qolip_zamok', 'qolip_klin', 'qolip_shkvoren', 'qolip_tyaga', 'qolip_gayka',
+    'qolip_shayba', 'qolip_brace', 'qolip_ogolovnik', 'qolip_zahvat', 'qolip_balka',
+    'qolip_ugol_out', 'qolip_ugol_in', 'qolip_ustun', 'qolip_ustun_gayka',
+    'qolip_tu', 'qolip_uchoyoq', 'qolip_univilka'
   ]);
   return (perFloor || []).map((f) => {
     const rows = boq.rows.filter((r) => r.floorId === f.id);

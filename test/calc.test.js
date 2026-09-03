@@ -84,8 +84,9 @@ test('KSHO va MSHO turli panel to\'plami beradi', () => {
   };
   const msho = mk('msho'), ksho = mk('ksho');
   assert.ok(msho.q.panelCount > ksho.q.panelCount, 'mayda shtitli qolipda panel ko\'proq bo\'ladi');
-  assert.ok(msho.boq.rows.some((r) => r.name.includes('MSHO')));
-  assert.ok(ksho.boq.rows.some((r) => r.name.includes('KSHO')));
+  // Nomlar katalogdagidek: КМО (Щит) va ЩЛ
+  assert.ok(msho.boq.rows.some((r) => r.name.startsWith('КМО (Щит)')), 'КМО nomi');
+  assert.ok(ksho.boq.rows.some((r) => r.name.startsWith('ЩЛ')), 'ЩЛ nomi');
 });
 
 test('klassik qavat vent-fasad qatorlarini beradi va faqat tashqi yuza', () => {
@@ -101,11 +102,12 @@ test('klassik qavat vent-fasad qatorlarini beradi va faqat tashqi yuza', () => {
   assert.ok(q.facadeArea < fw * 0.7, 'klassik fasad faqat tashqi yuzada bo\'lishi kerak');
 });
 
-test('narx jadvalini o\'zgartirish summani o\'zgartiradi', () => {
+test('po\'lat kg tarifini o\'zgartirish summani o\'zgartiradi', () => {
   const plan = samplePlan();
   const base = calc(plan).boq.total;
-  const pricey = calc(plan, { rates: { minar_zamok: DEFAULT_RATES.minar_zamok * 2 } }).boq.total;
-  assert.ok(pricey > base);
+  // Katalogda narx yo'q — pozitsiyalar og'irlik × kg tarifi bo'yicha narxlanadi
+  const pricey = calc(plan, { rates: { minar_panel_kg: DEFAULT_RATES.minar_panel_kg * 2 } }).boq.total;
+  assert.ok(pricey > base * 1.9, `${pricey} ≈ 2 × ${base} bo'lishi kerak`);
 });
 
 test('normalizeFloors: balandlik 0.5..6 chegarasiga siqiladi', () => {

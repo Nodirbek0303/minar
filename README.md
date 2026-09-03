@@ -82,29 +82,65 @@ server/            Express API (Node ESM)
   lib/auth.js      Parol asosidagi sessiya
   lib/db.js        JSON-fayl baza (xotirada kesh + atomik yozuv navbati)
   lib/ai.js        AI vision (rasm→plan JSON) + chat yordamchi
-shared/formwork.js MINAR katalogi, panel joylash (DP), me'yorlar, qolip hisobi
+shared/catalog.js  MINAR katalogi (XLSX dan avtomatik, 796 pozitsiya)
+shared/formwork.js Panel joylash (DP), me'yorlar, qolip hisobi
+tools/             import-catalog.mjs — katalogni XLSX dan yangilash
+deploy.sh          Serverga chiqarish (baza zaxirasi bilan)
 src/               React + Three.js (Vite)
 test/              node:test — hisob, DXF va validatsiya testlari
 ```
 
+## MINAR katalogi — hisobning asosi
+
+Barcha nomlar, o'lchamlar va og'irliklar **`data/catalog/minar-katalog.xlsx`** dan olingan
+(796 pozitsiya) va `shared/catalog.js` ga avtomatik o'tkazilgan. Hisob-kitob **faqat shu
+katalogdagi o'lchamlar** bilan yuritiladi — katalogda yo'q panel hech qachon taklif qilinmaydi.
+
+```bash
+node tools/import-catalog.mjs "data/catalog/minar-katalog.xlsx"   # katalogni qayta yuklash
+```
+
+| Guruh | Katalogdagi soni | Izoh |
+|---|---|---|
+| **КМО (Щит)** | 45 | Devor qolipi, mayda shtitli: eni 200–600 mm (50 qadam) × balandligi 300–1500 mm (300 qadam) |
+| **ЩЛ** | 88 | Katta shtitli: eni 200–1200 mm × balandligi 1200–3300 mm |
+| **ЩУ** | 54 | Universal katta panel: eni 500–1200 mm × balandligi 1200–3300 mm |
+| **ЩУВ / ЩУВУ / ЩШ / ЩУН** | 458 | Burchak va ustun elementlari |
+| **ЩУР** | 8 | Ustun qolipi 0,3×0,3×(0,6…3,3) m |
+| Угол внутренний / наружний | 34 | Burchak profillari |
+| Балка выравнивающая | 27 | Tekislovchi balka |
+| Винт стяжной (Тайрот) | 18 | Tyaga |
+| Подкос винтовой | 16 | Qiyalik tayanch |
+| УЭ, Замок, Клин, Гайка, Шайба v.b. | 43 | Aksessuarlar |
+
+Spetsifikatsiyada nomlar **aynan katalogdagidek** chiqadi: `КМО (Щит) 600х1500 — 23.4 kg`,
+`Замок универсальный — 4.5 kg`, `Винт стяжной заготовка БМ/16/, 0,6м — 0.84 kg`.
+
+**Narxlash:** katalog faylida narx yo'q (faqat nom / o'lcham / og'irlik), shuning uchun standart
+narx **og'irlik × po'lat kg tarifi** bo'yicha chiqariladi (`minar_panel_kg`, arendada
+`qolip_panel_rent` × oylar). Har bir qator narxi "Materiallar va narx" bo'limida qo'lda
+kiritiladi. Katalogda og'irligi ko'rsatilmagan pozitsiyalar qatorida shu haqda yozuv chiqadi.
+
 ## Hisob me'yorlari
 
-Barcha aksessuar formulalari `shared/formwork.js` dagi **`FORMWORK_NORMS`** da, izohi bilan bir joyda turadi:
+Miqdor me'yorlari `shared/formwork.js` dagi **`FORMWORK_NORMS`** da, izohi bilan bir joyda turadi:
 
-- **Qolip devorning ikkala yuzasiga** qo'yiladi (`FACES = 2`); eshik va deraza o'rinlariga panel qo'yilmaydi — u yerlar proyom qutisi bilan yopiladi
-- **MSHO** — 200–600 × 300–1500 mm, 26 kg/m² (katalogda 1500×500 va 1500×600 yo'q)
-- **KSHO** — 3.3 m gacha, 90 kg/m²
-- Panellar devor uzunligi va balandligiga **DP algoritmi** bilan aniq joylanadi; juda uzun devor xotira uchun bo'laklarga bo'linadi
-- Zamok: panelga 2 dona, har zamokka 1 klin
-- Tyaga: devor bo'ylab 0.9 m qadam, har 1.2 m balandlikda bir qator; har tyagaga 2 cho'yan gayka
-- Vertikal truba 1.2 m qadam; gorizontal truba har 1.2 m balandlikda (5% ulanish zaxirasi)
-- Ikki shoxli tirgak: vertikal × gorizontal truba kesishmalari soni
-- Push-pull tirgak: 2.4 m qadam, 2 yuza
-- Ustun qolipi: devor bog'lanish nuqtalarida 40×40 sm (perimetr 1.6 m × balandlik)
-- **TU teleskopik ustun**: pol maydonining har 1.5 m² ga 1 dona + uch oyoq + univilka; model qavat balandligiga qarab tanlanadi
+- **Qolip devorning ikkala yuzasiga** qo'yiladi (`FACES = 2`); eshik va deraza o'rinlariga panel qo'yilmaydi
+- Panellar devor uzunligi va balandligiga **DP algoritmi** bilan, faqat katalogdagi o'lchamlardan joylanadi
+- Zamok (Замок универсальный): panelga 2 dona; har zamokka 1 klin va 1 shkvoren
+- Tyaga (Винт стяжной): devor bo'ylab 0.9 m qadam, har 1.2 m balandlikda bir qator; uzunligi devor
+  qalinligi + 0.25 m ga qarab katalogdan tanlanadi; har tyagaga 2 gayka va 2 shayba
+- Tekislovchi balka (Балка выравнивающая): har 1.2 m balandlikda devor bo'ylab, 2 yuza
+- Push-pull tirgak (Подкос винтовой): 2.4 m qadam, 2 yuza; uzunligi qavat balandligiga qarab katalogdan
+- Burchak profillari: har tashqi burchakda, qavat balandligini qoplaydigan sonda
+- Ustun qolipi (ЩУР): devor bog'lanish nuqtalarida, balandligi qavatga mos
+- **TU teleskopik ustun**: pol maydonining har 1.5 m² ga 1 dona + uch oyoq + univilka.
+  ⚠ Bu guruh Excel katalogida **yo'q** (u faqat devor va ustun qolipini qamraydi) —
+  qiymatlar MINAR UZB.pdf dan olingan
 - Unumdorlik: qolip montaji 5 m²/kun·kishi, brigada 4 kishi
 
-3D ko'rinish va spetsifikatsiya **bitta** joylashuv funksiyasidan (`layoutWallFaceWithOpenings`) foydalanadi — ekranda ko'ringan narsa smetadagi raqam bilan bir xil.
+3D ko'rinish va spetsifikatsiya **bitta** joylashuv funksiyasidan (`layoutWallFaceWithOpenings`)
+foydalanadi — ekranda ko'ringan panel smetadagi qator bilan bir xil.
 
 ## Chegaralar (validatsiya)
 

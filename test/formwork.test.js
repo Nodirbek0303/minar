@@ -45,12 +45,48 @@ test('fillLinear: juda uzun devor bo\'laklarga bo\'linadi (xotira chegarasi)', (
   assert.ok(r.covered - long < 5000, 'bo\'laklarga bo\'linganda ham ortiqcha kichik qolishi kerak');
 });
 
-test('layoutWallFace: katalogda yo\'q kombinatsiya (1500×500, 1500×600) ishlatilmaydi', () => {
+test('layoutWallFace: faqat KATALOGDA MAVJUD o\'lchamlar ishlatiladi', () => {
   const f = layoutWallFace({ type: 'msho', lenM: 6, hM: 3 });
-  for (const key of Object.keys(f.panelCounts)) {
-    assert.ok(key !== '500x1500' && key !== '600x1500', 'taqiqlangan kombinatsiya: ' + key);
-  }
   assert.ok(f.totalPanels > 0);
+  for (const key of Object.keys(f.panelCounts)) {
+    const [w, h] = key.split('x').map(Number);
+    assert.ok(MINAR.msho.byKey.has(w + 'x' + h), 'katalogda yo\'q o\'lcham: ' + key);
+    assert.ok(panelSpec('msho', w, h), 'panelSpec topmadi: ' + key);
+  }
+});
+
+test('katalog to\'liq yuklangan (Excel dagi barcha pozitsiyalar)', () => {
+  assert.ok(MINAR.catalogTotal >= 700, 'pozitsiyalar soni: ' + MINAR.catalogTotal);
+  assert.equal(MINAR.msho.items.length, 45, 'КМО panellari: 9 eni × 5 balandlik');
+  assert.deepEqual([...MINAR.msho.widths].sort((a, b) => a - b), [200, 250, 300, 350, 400, 450, 500, 550, 600]);
+  assert.deepEqual([...MINAR.msho.heights].sort((a, b) => a - b), [300, 600, 900, 1200, 1500]);
+  assert.ok(MINAR.ksho.items.length >= 80, 'ЩЛ panellari');
+  assert.ok(MINAR.columns.length >= 8 && MINAR.angles.length >= 30 && MINAR.braces.length >= 10);
+});
+
+test('panel og\'irligi katalogdan olinadi (hisoblanmaydi)', () => {
+  // Excel: КМО (Щит) 600х1500 = 23.4 kg, 200х300 = 1.56 kg
+  assert.equal(panelSpec('msho', 600, 1500).weight, 23.4);
+  assert.equal(panelSpec('msho', 200, 300).weight, 1.56);
+  assert.equal(panelSpec('msho', 550, 900).weight, 12.87);
+  assert.equal(panelSpec('msho', 600, 1500).name, 'КМО (Щит) 600х1500');
+  // katalogda yo'q o'lcham qabul qilinmaydi
+  assert.equal(panelSpec('msho', 610, 1500), null);
+  assert.equal(panelSpec('msho', 600, 1800), null);
+});
+
+test('spetsifikatsiya nomlari katalogdagidek', () => {
+  const plan = boxPlan();
+  const { rows } = computeFormwork({ plan, floors: [FL()], rates: {} });
+  const names = rows.map((r) => r.name);
+  assert.ok(names.some((n) => n.startsWith('КМО (Щит)')), 'panel nomi katalogdan');
+  assert.ok(names.some((n) => n.startsWith('Замок универсальный')), 'zamok');
+  assert.ok(names.some((n) => n.startsWith('Клин')), 'klin');
+  assert.ok(names.some((n) => n.startsWith('Винт стяжной')), 'tyaga');
+  assert.ok(names.some((n) => n.startsWith('Гайка D90')), 'gayka');
+  assert.ok(names.some((n) => n.startsWith('Подкос винтовой')), 'podkos');
+  assert.ok(names.some((n) => n.startsWith('ЩУР')), 'ustun qolipi');
+  assert.ok(names.some((n) => n.startsWith('Угол')), 'burchak elementi');
 });
 
 test('layoutWallFace: panellar yig\'indisi devor balandligini qoplaydi', () => {
@@ -67,9 +103,13 @@ test('layoutWallFaceWithOpenings: eshik o\'rniga panel qo\'yilmaydi', () => {
     openings: [{ x0: 2, x1: 3, y0: 0, y1: 2.1 }]
   });
   assert.ok(withDoor.areaM2 < full.areaM2, 'ochiqlikli devor yuzasi kichikroq bo\'lishi kerak');
-  assert.ok(withDoor.totalPanels < full.totalPanels, 'ochiqlikli devorda panel kamroq bo\'lishi kerak');
-  // eshik yuzasi (1 × 2.1 = 2.1 m²) taxminan chegirilgan bo'lishi kerak
+  assert.ok(withDoor.totalPanels <= full.totalPanels, 'panel soni oshib ketmasligi kerak');
+  // eshik yuzasi (1 × 2.1 = 2.1 m²) chegirilgan bo'lishi kerak
   assert.ok(full.areaM2 - withDoor.areaM2 >= 1.5, 'eshik yuzasi chegirilmadi');
+  // eshik oralig'ida pastki qismda panel bo'lmasligi kerak
+  for (const s of withDoor.segments.filter((g) => g.x >= 1.99 && g.x + g.lenM <= 3.01)) {
+    assert.ok(s.y >= 2.09, `eshik o'rniga panel tushib qolgan: y=${s.y}`);
+  }
 });
 
 test('layoutWallFaceWithOpenings: deraza ustidagi va ostidagi bo\'lak yopiladi', () => {
@@ -85,11 +125,10 @@ test('layoutWallFaceWithOpenings: deraza ustidagi va ostidagi bo\'lak yopiladi',
   }
 });
 
-test('panelSpec: og\'irlik katalog kg/m² ga mos', () => {
+test('panelSpec: maydon o\'lchamdan, og\'irlik katalogdan', () => {
   const s = panelSpec('msho', 600, 1200);
   assert.equal(s.area, 0.72);
-  assert.equal(s.weight, +(0.72 * 26).toFixed(2));
-  assert.equal(panelSpec('msho', 600, 1500), null, 'taqiqlangan kombinatsiya null qaytarishi kerak');
+  assert.equal(s.weight, 18.72); // Excel dagi qiymat
 });
 
 test('pickTU: qavat balandligiga mos model tanlanadi', () => {
@@ -106,12 +145,12 @@ test('computeFormwork: IKKI yuza hisoblanadi', () => {
   assert.ok(Math.abs(byFloor.f1.area - 96) < 3, `yuza ${byFloor.f1.area}, kutilgan ~96`);
 });
 
-test('computeFormwork: TU, uch oyoq va univilka spetsifikatsiyada bor', () => {
+test('computeFormwork: barcha guruhlar spetsifikatsiyada bor', () => {
   const { rows } = computeFormwork({ plan: boxPlan(), floors: [FL()], rates: {} });
   const keys = new Set(rows.map((r) => r.baseKey));
   for (const k of ['qolip_panel', 'qolip_zamok', 'qolip_klin', 'qolip_tyaga', 'qolip_gayka',
-    'qolip_ushlagich', 'qolip_brace', 'qolip_truba_v', 'qolip_truba_h', 'qolip_tu',
-    'qolip_uchoyoq', 'qolip_univilka']) {
+    'qolip_shayba', 'qolip_brace', 'qolip_balka', 'qolip_ugol_out', 'qolip_ustun',
+    'qolip_tu', 'qolip_uchoyoq', 'qolip_univilka']) {
     assert.ok(keys.has(k), 'yetishmayapti: ' + k);
   }
   const tu = rows.find((r) => r.baseKey === 'qolip_tu');
@@ -131,10 +170,10 @@ test('computeFormwork: arenda rejimi oylik tarif × oylar bo\'yicha narxlaydi', 
   const zamok1 = rent1.rows.find((r) => r.baseKey === 'qolip_zamok');
   const zamok3 = rent3.rows.find((r) => r.baseKey === 'qolip_zamok');
 
-  assert.equal(zamokBuy.matKey, 'minar_zamok', 'sotib olishda katalog narx kaliti');
-  assert.equal(zamokBuy.matRateOverride, null);
-  assert.equal(zamok1.matRateOverride, 8000, 'arendada oylik tarif');
-  assert.equal(zamok3.matRateOverride, 24000, '3 oy = 3 × oylik tarif');
+  // Замок универсальный = 4.5 kg (katalogdan); narx og'irlik × kg tarifi
+  assert.equal(zamokBuy.matRateOverride, Math.round(4.5 * 18000), 'sotib olish: 4.5 kg × 18000');
+  assert.equal(zamok1.matRateOverride, Math.round(4.5 * 4000), 'arenda 1 oy: 4.5 kg × 4000');
+  assert.equal(zamok3.matRateOverride, Math.round(4.5 * 4000 * 3), '3 oy = 3 × oylik');
   assert.equal(zamok1.qty, zamok3.qty, 'miqdor oylardan o\'zgarmasligi kerak');
 });
 

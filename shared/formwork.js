@@ -8,32 +8,58 @@
 //  o'rinlari esa ikkala yuzadan ham chegiriladi (FORMWORK_FACES).
 // ============================================================
 
+import { CATALOG } from './catalog.js';
+
+// Panel oilasidan o'lchamlar ro'yxatini olish (faqat katalogda BOR bo'lganlari)
+function panelFamily(key, title, desc) {
+  const items = CATALOG.panels[key]?.items || [];
+  const widths = [...new Set(items.map((i) => i.w))].sort((a, b) => b - a);
+  const heights = [...new Set(items.map((i) => i.h))].sort((a, b) => b - a);
+  const byKey = new Map(items.map((i) => [i.w + 'x' + i.h, i]));
+  return { key, name: title, desc, items, widths, heights, byKey };
+}
+
 export const MINAR = {
   brand: 'MINAR — Silk Stars Engineering',
   contact: { site: 'www.minar.uz', phone: '(88) 141-45-00', ig: 'minar.uzbekistan' },
+  catalogSource: CATALOG.source,
+  catalogTotal: CATALOG.total,
   colors: [
     { id: 'RAL3020', name: 'Qizil', hex: '#c22a1e' },
     { id: 'RAL9005', name: 'Qora', hex: '#1c1c1e' },
     { id: 'RAL2004', name: "To'q sariq", hex: '#e25303' }
   ],
-  // MSHO — mayda shtitli qolip: eni 200-600, balandlik 300-1500 mm (1 m² = 26 kg)
-  msho: {
-    name: 'MSHO — mayda shtitli qolip',
-    desc: 'Po‘lat 1045 profil 65×4 mm, fanera 12 mm (laminat 220 g/m²), RAL3020 kukun bo‘yoq',
-    widths: [600, 500, 450, 400, 350, 300, 250, 200],
-    heights: [1500, 1200, 900, 600, 300],
-    kgPerM2: 26,
-    noCombo: [['1500', '500'], ['1500', '600']] // katalogda yo'q kombinatsiyalar
+
+  // ---- Devor qolipi panellari — o'lchamlar va og'irliklar KATALOGDAN ----
+  // msho: КМО (Щит) 200-600 × 300-1500 mm
+  msho: panelFamily('kmo', 'КМО (Щит) — mayda shtitli qolip',
+    'Katalogdagi 45 o\'lcham: eni 200-600 mm (50 mm qadam), balandligi 300-1500 mm (300 mm qadam)'),
+  // ksho: ЩЛ 200-1200 × 1200-3300 mm
+  ksho: panelFamily('shl', 'ЩЛ — katta shtitli qolip',
+    'Katalogdagi 88 o\'lcham: eni 200-1200 mm, balandligi 1200-3300 mm'),
+  // shu: ЩУ universal katta panel
+  shu: panelFamily('shu', 'ЩУ — universal katta panel',
+    'Katalogdagi 54 o\'lcham: eni 500-1200 mm, balandligi 1200-3300 mm'),
+
+  // ---- Katalogdan olingan boshqa guruhlar ----
+  columns: CATALOG.columns,       // ЩУР ustun qolipi
+  corners: CATALOG.corners,       // ЩУВ / ЩУВУ / ЩШ / ЩУН burchak elementlari
+  angles: CATALOG.angles,         // Угол внутренний / наружний
+  extensions: CATALOG.extensions, // УЭ
+  beams: CATALOG.beams,           // Балка выравнивающая
+  ties: CATALOG.ties,             // Винт стяжной (Тайрот)
+  braces: CATALOG.braces,         // Подкос винтовой
+  accessories: CATALOG.accessories,
+
+  // Katalogdan nom bo'yicha topish (aniq nom bilan)
+  item(name) {
+    return CATALOG.accessories.find((a) => a.name === name) || null;
   },
-  // KSHO — katta shtitli qolip: profil 120×60, ST3SP, 2 mm devor, 3.3 m gacha
-  ksho: {
-    name: 'KSHO — katta shtitli qolip',
-    desc: 'Qolip profili 120×60 (ST3SP), qovurg‘a 2 mm, fanera 12 mm, konus vtulkalar',
-    widths: [1200, 1000, 900, 750, 600, 500, 400, 300],
-    heights: [3300, 3000, 2700, 1800, 1500, 1200, 900, 600],
-    kgPerM2: 90
-  },
-  // TU — teleskopik ustunlar (p20 jadvali)
+
+  // ---- TU teleskopik ustunlar ----
+  // DIQQAT: bu guruh yuklangan Excel katalogida YO'Q (u faqat devor va ustun
+  // qolipini qamraydi). Quyidagi qiymatlar MINAR UZB.pdf katalogidan olingan
+  // va pol (perekrytiye) qolipi uchun ishlatiladi.
   tu: [
     { id: 'TU3.2',  name: 'Teleskopik ustun TU3,2',  range: [1.7, 2.0], weight: 9.84 },
     { id: 'TU3.2L', name: 'Teleskopik ustun TU3,2 (uzun)', range: [1.7, 2.5], weight: 10.79 },
@@ -45,18 +71,16 @@ export const MINAR = {
   ],
   tuTripod: { name: 'Uch oyoq (stoyka triposer)', weight: 4.45 },
   tuUnivilka: { name: 'Univilka (vilka)', weight: 1.4 },
-  zamok: {
-    universal: { name: 'Universal zamok (240 mm, 50 kN)', weight: 4.6 },
-    klinli: { name: 'Klinli zamok (120 mm, 45 kN)', weight: 2.25 },
-    qulf: { name: 'Qulf zamok (cho‘yan, 120 mm, 45 kN)', weight: 2.5 },
-    uzaytirilgan: { name: 'Uzaytirilgan zamok (375 mm, 45 kN)', weight: 5.0 }
-  },
-  tyaga: { name: 'Tyaga (tayrot) vint', lengths: [0.8, 1.0, 1.2, 1.5, 3.0], weight: 1.5, kN: 150 },
-  gayka: { name: "Cho'yan gayka (150 kN)", weight: 0.52 },
-  klin: { name: 'Klin (79×27)', weight: 0.15 },
-  trubaVert: { name: 'Vertikal truba + ushlagich (100×75)' },
-  trubaHoriz: { name: 'Gorizontal truba + ushlagich (148×73)' }
+  tuSource: 'MINAR UZB.pdf (Excel katalogida pol qolipi yo\'q)'
 };
+
+// Katalogdagi eng yaqin (kerakligidan kichik bo'lmagan) o'lchamni tanlash
+export function pickByLength(list, needMm, field = 'len') {
+  const ok = list.filter((i) => Number.isFinite(i[field]));
+  if (!ok.length) return null;
+  const fit = ok.filter((i) => i[field] >= needMm).sort((a, b) => a[field] - b[field]);
+  return fit[0] || ok.sort((a, b) => b[field] - a[field])[0];
+}
 
 // ------------------------------------------------------------
 //  ME'YORLAR — barcha aksessuar formulalari shu yerda, bir joyda.
@@ -78,12 +102,8 @@ export const FORMWORK_NORMS = {
   TYAGA_ROW_STEP_M: 1.2,
   // Har tyaganing ikki uchida bittadan cho'yan gayka.
   GAYKA_PER_TYAGA: 2,
-  // Vertikal truba: devor bo'ylab 1.2 m qadam + har devor uchida bittadan (2 yuza).
-  TRUBA_V_STEP_M: 1.2,
-  // Gorizontal truba: har 1.2 m balandlikda devor bo'ylab, 5% ulanish zaxirasi.
-  TRUBA_H_ROW_STEP_M: 1.2,
-  TRUBA_H_WASTE: 1.05,
-  // Ikki shoxli tirgak (truba ushlagichi): har vertikal truba × har gorizontal truba kesishmasi.
+  // Tekislovchi balka (Балка выравнивающая): har 1.2 m balandlikda devor bo'ylab, 2 yuza.
+  BEAM_ROW_STEP_M: 1.2,
   // Push-pull tirgak (qiyalik tayanch): devor bo'ylab 2.4 m qadam, 2 yuza.
   BRACE_STEP_M: 2.4,
   // Ustun qolipi: 40×40 sm ustun, perimetri 1.6 m (4 tomon × 0.4 m).
@@ -98,14 +118,19 @@ export const FORMWORK_NORMS = {
 
 export const COLUMN_SIZE = FORMWORK_NORMS.COLUMN_SIZE_M;
 
-// Panel og'irligi va maydoni
+// Panel og'irligi va maydoni — FAQAT katalogdagi o'lchamlar qabul qilinadi.
+// Katalogda yo'q kombinatsiya uchun null qaytadi va u hisobga kirmaydi.
 export function panelSpec(type, wMm, hMm) {
   const def = MINAR[type];
-  if (!def) return null;
-  const banned = type === 'msho' ? MINAR.msho.noCombo : [];
-  if (banned.some(([h, w]) => String(hMm) === h && String(wMm) === w)) return null;
-  const area = (wMm * hMm) / 1e6;
-  return { w: wMm, h: hMm, area: +area.toFixed(3), weight: +(area * def.kgPerM2).toFixed(2) };
+  if (!def?.byKey) return null;
+  const item = def.byKey.get(wMm + 'x' + hMm);
+  if (!item) return null;
+  return {
+    w: item.w, h: item.h,
+    name: item.name,
+    area: +((item.w * item.h) / 1e6).toFixed(3),
+    weight: item.kg
+  };
 }
 
 // Qavat balandligiga mos teleskopik ustun modelini tanlash
@@ -265,9 +290,9 @@ export function layoutWallFace({ type, lenM, hM, wallLenM, wallH, gapM = FORMWOR
   const panelCounts = {}; // "w x h" -> dona
   const rowPlans = [];
   for (const hMm of rows) {
-    // katalogda yo'q kombinatsiyalar (masalan 1500x600) shu qatorda ishlatilmaydi
-    const banned = type === 'msho' ? MINAR.msho.noCombo : [];
-    const allowed = def.widths.filter((w) => !banned.some(([hh, ww]) => String(hMm) === hh && String(w) === ww));
+    // Shu balandlikda KATALOGDA MAVJUD bo'lgan enlar bilan yopiladi
+    const allowed = def.widths.filter((w) => def.byKey.has(w + 'x' + hMm));
+    if (!allowed.length) continue;
     const f = fillLinear(L, allowed);
     for (const [wMm, cnt] of Object.entries(f.counts)) {
       const key = wMm + 'x' + hMm;
@@ -400,6 +425,25 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     return { matKey: null, matRateOverride: Math.round(monthly * rentMonths) };
   };
 
+  // Katalog pozitsiyasini og'irligi bo'yicha narxlash.
+  // Faylda narx yo'q (faqat nom/o'lcham/og'irlik), shuning uchun standart narx
+  // po'lat kg tarifidan chiqariladi; har qator UI'da qo'lda tahrirlanadi.
+  const kgRateBuy = Number(R.minar_panel_kg ?? 18000);
+  const kgRateRent = Number(R.qolip_panel_rent ?? MINAR_RENT.qolip_panel) * rentMonths;
+  const priceOf = (kg) => (Number.isFinite(kg) && kg > 0
+    ? Math.round(kg * (rent ? kgRateRent : kgRateBuy))
+    : null);
+
+  // Katalogdagi pozitsiyani qo'shish: nom, og'irlik va narx — hammasi katalogdan
+  const addCat = (fl, baseKey, item, qty, note = '') => {
+    if (!item || !(qty > 0)) return;
+    // Katalogda og'irlik ko'rsatilmagan pozitsiya uchun narx chiqarib bo'lmaydi —
+    // qator ko'rinadi, lekin narxni foydalanuvchi qo'lda kiritishi kerakligi yoziladi
+    const tail = item.kg ? ` — ${item.kg} kg` : ' — og\'irligi katalogda yo\'q, narxni qo\'lda kiriting';
+    add(fl, baseKey, `${item.name}${tail}${note}`, item.unit || 'dona', qty,
+      { matKey: null, matRateOverride: priceOf(item.kg) });
+  };
+
   const add = (fl, baseKey, name, unit, qty, opts = {}) => {
     if (!(qty > 0)) return;
     const p = opts.matKey !== undefined || opts.matRateOverride !== undefined ? opts : priced(baseKey);
@@ -422,6 +466,7 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     const H = Math.max(0.5, Number(fl.height) || 3);
     const agg = {};            // "w x h" -> dona (ikki yuza bilan)
     let extLenTotal = 0;       // tashqi devor uzunligi
+    let maxThickness = 0.2;    // eng qalin tashqi devor (tyaga uzunligi uchun)
     let panelAreaM2 = 0;       // panel bilan yopilgan sof yuza (2 yuza)
     let skippedAreaM2 = 0;     // panelга kichik qolgan (proyom qutisi bilan yopiladi)
 
@@ -429,6 +474,7 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
       const L = wallLengthOf(w);
       if (L < 0.5) continue;
       extLenTotal += L;
+      maxThickness = Math.max(maxThickness, Number(w.thickness) || 0.2);
       const ops = openingsOfWall(plan, w, H);
       const face = layoutWallFaceWithOpenings({ type, lenM: L, hM: H, openings: ops });
       for (const [k, c] of Object.entries(face.panelCounts)) agg[k] = (agg[k] || 0) + c * N.FACES;
@@ -446,8 +492,9 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
       const kgRate = rent
         ? Number(R.qolip_panel_rent ?? MINAR_RENT.qolip_panel) * rentMonths
         : Number(R.minar_panel_kg ?? 18000);
+      // Nom katalogdagidek: "КМО (Щит) 450х1500"
       add(fl, 'qolip_panel',
-        `MINAR ${type.toUpperCase()} panel ${w}×${h} mm (${spec.weight} kg/dona, ${color})`,
+        `${spec.name} — ${spec.weight} kg/dona, ${color}`,
         'dona', cnt, { matKey: null, matRateOverride: Math.round(spec.weight * kgRate) });
     }
 
@@ -458,28 +505,59 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     const klin = Math.ceil(zamok * N.KLIN_PER_ZAMOK);
     const tyagaCnt = Math.ceil(extLenTotal / N.TYAGA_STEP_M) * tyagaRows;
     const gayka = tyagaCnt * N.GAYKA_PER_TYAGA;
-    const vertTubesPerFace = Math.ceil(extLenTotal / N.TRUBA_V_STEP_M) + extWalls.length;
-    const trubaVertM = vertTubesPerFace * H * N.FACES;
-    const horizRows = Math.max(1, Math.round(H / N.TRUBA_H_ROW_STEP_M));
-    const trubaHorizM = horizRows * extLenTotal * N.FACES * N.TRUBA_H_WASTE;
-    // Ikki shoxli tirgak: har vertikal truba har gorizontal truba bilan kesishgan joyda
-    const ushlagichCnt = vertTubesPerFace * N.FACES * horizRows;
+    // Tekislovchi balka qatorlari soni (balandlik bo'yicha)
+    const horizRows = Math.max(1, Math.round(H / N.BEAM_ROW_STEP_M));
     const braceCnt = Math.ceil(extLenTotal / N.BRACE_STEP_M) * N.FACES;
 
-    add(fl, 'qolip_zamok', 'Universal zamok (240 mm, 50 kN)', 'dona', zamok);
-    add(fl, 'qolip_klin', 'Klin (79×27)', 'dona', klin);
-    add(fl, 'qolip_tyaga', 'Tyaga (tayrot) 150 kN', 'dona', tyagaCnt);
-    add(fl, 'qolip_gayka', "Cho'yan gayka (150 kN)", 'dona', gayka);
-    add(fl, 'qolip_ushlagich', 'Ikki shoxli tirgak (truba ushlagichi 100×75)', 'dona', ushlagichCnt);
-    add(fl, 'qolip_brace', 'Push-pull tirgak (qiyalik tayanch, 2.5 m)', 'dona', braceCnt);
-    add(fl, 'qolip_truba_v', 'Vertikal truba (48 mm) + ushlagich', 'm', trubaVertM);
-    add(fl, 'qolip_truba_h', 'Gorizontal truba (48 mm) + ushlagich (148×73)', 'm', trubaHorizM);
+    // Barcha pozitsiyalar KATALOGDAN — nom, o'lcham, og'irlik aynan fayldagidek
+    const cat = (n) => MINAR.item(n);
 
-    // --- Ustunlar (40×40) — devor bog'lanish nuqtalarida ---
+    addCat(fl, 'qolip_zamok', cat('Замок универсальный'), zamok);
+    addCat(fl, 'qolip_klin', cat('Клин'), klin);
+    addCat(fl, 'qolip_shkvoren', cat('Шкворень палец'), zamok);
+
+    // Tyaga (tayrot): devor qalinligi + ikki tomondagi qolip va gaykalar uchun zaxira
+    const tie = pickByLength(
+      MINAR.ties.filter((t) => t.family === 'tie_blank'),
+      Math.round((maxThickness + 0.25) * 1000)
+    );
+    addCat(fl, 'qolip_tyaga', tie, tyagaCnt);
+    addCat(fl, 'qolip_gayka', cat('Гайка D90'), gayka);
+    addCat(fl, 'qolip_shayba', cat('Шайба 120х120х5'), gayka);
+
+    // Push-pull qiyalik tayanch — qavat balandligiga mos uzunlik katalogdan
+    const brace = pickByLength(
+      MINAR.braces.filter((b) => b.family === 'brace_1' && b.len),
+      Math.round(H * 1.2 * 1000)
+    );
+    addCat(fl, 'qolip_brace', brace, braceCnt);
+    addCat(fl, 'qolip_ogolovnik', cat('Оголовник подкоса'), braceCnt);
+
+    // Montaj zahvati — har ~40 panelga bitta
+    addCat(fl, 'qolip_zahvat', cat('Захват монтажный'), Math.max(2, Math.ceil(panels / 40)));
+
+    // Tekislovchi balka — devor bo'ylab har gorizontal qatorga, ikki yuza
+    const beam = pickByLength(MINAR.beams.filter((b) => b.family === 'beam' && b.len), 1200);
+    if (beam) {
+      addCat(fl, 'qolip_balka', beam,
+        Math.ceil(extLenTotal / (beam.len / 1000)) * horizRows * N.FACES);
+    }
+
+    // --- Burchak elementlari: har tashqi burchakda, qavat balandligi bo'yicha ---
+    const cornerCount = countCorners(extWalls);
+    if (cornerCount > 0) {
+      const angOut = pickByLength(MINAR.angles.filter((a) => a.family === 'angle_out' && a.h), Math.round(H * 1000), 'h');
+      const angIn = pickByLength(MINAR.angles.filter((a) => a.family === 'angle_in' && a.h), Math.round(H * 1000), 'h');
+      if (angOut) addCat(fl, 'qolip_ugol_out', angOut, cornerCount * Math.ceil(H / (angOut.h / 1000)));
+      if (angIn) addCat(fl, 'qolip_ugol_in', angIn, cornerCount * Math.ceil(H / (angIn.h / 1000)));
+    }
+
+    // --- Ustun qolipi (ЩУР) — devor bog'lanish nuqtalarida ---
     const cols = columnJunctions(plan);
-    const colArea = cols.length * (N.COLUMN_SIZE_M * 4) * H;
-    if (colArea > 0) {
-      add(fl, 'qolip_ustun', `Ustun qolipi — universal (40×40 sm, ${cols.length} dona)`, 'm2', colArea);
+    if (cols.length) {
+      const shur = pickByLength(MINAR.columns, Math.round(H * 1000), 'h');
+      addCat(fl, 'qolip_ustun', shur, cols.length, ' — ustun qolipi');
+      addCat(fl, 'qolip_ustun_gayka', cat('ЩУР гайка литая / цинк'), cols.length * 4);
     }
 
     // --- TU teleskopik ustunlar (pol/perekrytiye qolipi) ---
@@ -487,9 +565,10 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     if (deckArea > 0) {
       const tu = pickTU(H);
       const tuCnt = Math.ceil(deckArea / N.TU_AREA_PER_POST_M2);
-      add(fl, 'qolip_tu', `${tu.name} (${tu.range[0]}–${tu.range[1]} m, ${tu.weight} kg)`, 'dona', tuCnt);
-      add(fl, 'qolip_uchoyoq', MINAR.tuTripod.name, 'dona', tuCnt);
-      add(fl, 'qolip_univilka', MINAR.tuUnivilka.name, 'dona', tuCnt);
+      // DIQQAT: pol qolipi Excel katalogida yo'q — bu uchtasi MINAR UZB.pdf dan
+      addCat(fl, 'qolip_tu', { name: tu.name + ` (${tu.range[0]}–${tu.range[1]} m)`, kg: tu.weight, unit: 'dona' }, tuCnt);
+      addCat(fl, 'qolip_uchoyoq', { name: MINAR.tuTripod.name, kg: MINAR.tuTripod.weight, unit: 'dona' }, tuCnt);
+      addCat(fl, 'qolip_univilka', { name: MINAR.tuUnivilka.name, kg: MINAR.tuUnivilka.weight, unit: 'dona' }, tuCnt);
     }
 
     // qavat bo'yicha yopilgan yuza — UI, spetsifikatsiya va 5D jadval shu raqamni ishlatadi
@@ -502,6 +581,20 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     };
   }
   return { rows: out, byFloor };
+}
+
+// Tashqi kontur burchaklari soni: ikki tashqi devor uchi tutashadigan nuqtalar
+export function countCorners(extWalls) {
+  const pts = [];
+  for (const w of extWalls) for (const p of [w.a, w.b]) pts.push(p);
+  let corners = 0;
+  const seen = [];
+  for (const p of pts) {
+    if (seen.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.15)) continue;
+    const touching = pts.filter((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 0.15).length;
+    if (touching >= 2) { corners++; seen.push(p); }
+  }
+  return corners;
 }
 
 // Pol (perekrytiye) maydoni: xonalar yig'indisi, bo'lmasa tashqi kontur gabariti
