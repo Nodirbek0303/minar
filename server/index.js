@@ -17,6 +17,8 @@ import {
   SUPPORTED_EXT, fileKind, textOf, imageDataUri, pdfToImages, cleanupDir, popplerAvailable
 } from './lib/extract.js';
 import { parseFloorsFromText, parseSize, describeParsed } from './lib/docparse.js';
+import { detectRole, ROLES } from './lib/docrole.js';
+import { parseSpecification, compareToSpec } from './lib/specparse.js';
 import {
   validatePlan, validateFloors, validateRates, validatePriceOverrides, validateOpts, ValidationError
 } from './lib/validate.js';
@@ -81,12 +83,28 @@ app.use(requireAuth(['/api/login', '/api/logout', '/api/auth-status']));
 app.use('/files', express.static(UPLOAD_DIR, { dotfiles: 'deny', index: false }));
 
 // ---------- Upload (bir yoki bir necha fayl) ----------
+// Fayl nomini to'g'ri o'qish. multer/busboy nomni latin1 deb oladi, shuning uchun
+// kirill (ruscha) nomlar buziladi: "Спецификация" → "Ð¡Ð¿ÐµÑ...".
+// UTF-8 ga qaytarilmasa, hujjat roli fayl nomidan aniqlanmay qoladi.
+function fixName(name) {
+  const raw = String(name || '');
+  if (!/[\u00C0-\u00FF]/.test(raw)) return raw;         // buzilish belgisi yo'q
+  try {
+    const fixed = Buffer.from(raw, 'latin1').toString('utf8');
+    // Qayta o'girish kirill/lotin harf bergan bo'lsa — qabul qilamiz
+    return /[\u0400-\u04FF\w]/.test(fixed) && !fixed.includes('\uFFFD') ? fixed : raw;
+  } catch {
+    return raw;
+  }
+}
+
 const saveUploaded = (f, i) => {
   const id = 'f' + Date.now().toString(36) + i.toString(36);
-  const type = fileKind(f.originalname);
-  const meta = { id, name: f.originalname, path: f.filename, type, size: f.size };
+  const name = fixName(f.originalname);
+  const type = fileKind(name);
+  const meta = { id, name, path: f.filename, type, size: f.size };
   db.saveFile(id, meta);
-  return { fileId: id, name: f.originalname, type, size: f.size };
+  return { fileId: id, name, type, size: f.size };
 };
 
 app.post('/api/upload', upload.any(), (req, res) => {
@@ -126,6 +144,26 @@ app.post('/api/analyze', async (req, res, next) => {
   }
 });
 
+// Etalon spetsifikatsiyani tekshirish (tashqaridan kelgan ma'lumot)
+function validateEtalon(e) {
+  if (!e || typeof e !== 'object' || !Array.isArray(e.sections)) return null;
+  const sections = e.sections.slice(0, 20).map((s) => ({
+    title: String(s.title || 'Bo\'lim').slice(0, 120),
+    items: (Array.isArray(s.items) ? s.items : []).slice(0, 500).map((i) => ({
+      name: String(i.name || '').slice(0, 160),
+      qty: Math.max(0, Math.min(1e9, Number(i.qty) || 0)),
+      unit: String(i.unit || 'шт').slice(0, 16)
+    })).filter((i) => i.name && i.qty > 0)
+  })).filter((s) => s.items.length);
+  if (!sections.length) return null;
+  return {
+    fileName: String(e.fileName || '').slice(0, 160),
+    sections,
+    total: sections.reduce((n, s) => n + s.items.length, 0),
+    roles: Array.isArray(e.roles) ? e.roles.slice(0, 20) : []
+  };
+}
+
 // ---------- Ko'p hujjatli tahlil ----------
 // Barcha yuklangan fayllar BIRGA o'qiladi: DXF dan aniq geometriya,
 // rasm va PDF sahifalaridan AI vision, DOCX/XLSX/TXT dan matn konteksti.
@@ -140,7 +178,8 @@ app.post('/api/analyze-batch', async (req, res, next) => {
   const files = fileIds.map((id) => db.getFile(id)).filter(Boolean);
   if (!files.length) return res.status(404).json({ error: 'Fayllar topilmadi' });
 
-  const report = [];       // har fayl bo'yicha holat
+  const report = [];       // har fayl bo'yicha holat va ROLI
+  let etalon = null;       // topilgan tayyor spetsifikatsiya
   const images = [];       // AI vision uchun data URI lar
   const imageNames = [];
   const documents = [];    // Claude ga to'g'ridan-to'g'ri beriladigan PDF lar
@@ -152,16 +191,48 @@ app.post('/api/analyze-batch', async (req, res, next) => {
     for (const f of files) {
       const full = path.join(UPLOAD_DIR, path.basename(f.path));
       const kind = f.type && f.type !== 'other' ? f.type : fileKind(f.name);
+      // Hujjat roli: spetsifikatsiya / devor / perekrytiye / rigel / DWG ...
+      let roleText = '';
+      try {
+        if (['pdf', 'docx', 'xlsx', 'text'].includes(kind)) roleText = await textOf(full, kind);
+      } catch { /* rol aniqlashga xalal bermaydi */ }
+      const role = detectRole(f.name, roleText, kind);
+
+      // DWG — binar format, o'qib bo'lmaydi
+      if (role.id === 'cad') {
+        report.push({
+          name: f.name, kind, role: role.id, roleTitle: role.title, ok: false,
+          info: 'DWG binar format — AutoCAD da "Save As → DXF" qilib qayta yuklang'
+        });
+        continue;
+      }
+
+      // Tayyor spetsifikatsiya — etalon sifatida saqlanadi, chizma emas
+      if (role.id === 'spec' && roleText) {
+        try {
+          const parsed = parseSpecification(roleText, { fileName: f.name });
+          if (parsed.total > 0) {
+            etalon = parsed;
+            report.push({
+              name: f.name, kind, role: role.id, roleTitle: role.title, ok: true,
+              info: `${parsed.total} pozitsiya, ${parsed.sections.length} bo‘lim — etalon sifatida olindi`
+            });
+            if (roleText) texts.push(`--- ${f.name} ---\n${roleText}`);
+            continue;
+          }
+        } catch { /* oddiy hujjat sifatida davom etadi */ }
+      }
+
       try {
         if (kind === 'dxf') {
           const raw = analyzeDxf(await fs.promises.readFile(full, 'utf8'), { units });
           // eng ko'p devorli DXF ni asosiy geometriya deb olamiz
           if (!dxfPlan || raw.walls.length > dxfPlan.walls.length) { dxfPlan = raw; dxfFileName = f.name; }
-          report.push({ name: f.name, kind, ok: true, info: `${raw.walls.length} devor, ${raw.rooms.length} xona` });
+          report.push({ name: f.name, kind, role: role.id, roleTitle: role.title, ok: true, info: `${raw.walls.length} devor, ${raw.rooms.length} xona` });
         } else if (kind === 'image') {
           images.push(await imageDataUri(full));
           imageNames.push(f.name);
-          report.push({ name: f.name, kind, ok: true, info: 'AI ko‘rish uchun qo‘shildi' });
+          report.push({ name: f.name, kind, role: role.id, roleTitle: role.title, ok: true, info: 'AI ko‘rish uchun qo‘shildi' });
         } else if (kind === 'pdf') {
           const t = await textOf(full, 'pdf');
           if (t) texts.push(`--- ${f.name} ---\n${t}`);
@@ -172,7 +243,7 @@ app.post('/api/analyze-batch', async (req, res, next) => {
               mediaType: 'application/pdf',
               data: (await fs.promises.readFile(full)).toString('base64')
             });
-            report.push({ name: f.name, kind, ok: true, info: `hujjat sifatida AI ga berildi${t ? ', matn ham o‘qildi' : ''}` });
+            report.push({ name: f.name, kind, role: role.id, roleTitle: role.title, ok: true, info: `hujjat sifatida AI ga berildi${t ? ', matn ham o‘qildi' : ''}` });
           } else {
             const { dir, files: pages } = await pdfToImages(full, 6);
             tmpDirs.push(dir);
@@ -180,17 +251,17 @@ app.post('/api/analyze-batch', async (req, res, next) => {
               images.push(await imageDataUri(pg));
               imageNames.push(`${f.name} (${i + 1}-sahifa)`);
             }
-            report.push({ name: f.name, kind, ok: true, info: `${pages.length} sahifa rasmga o‘girildi${t ? ', matn o‘qildi' : ''}` });
+            report.push({ name: f.name, kind, role: role.id, roleTitle: role.title, ok: true, info: `${pages.length} sahifa rasmga o‘girildi${t ? ', matn o‘qildi' : ''}` });
           }
         } else if (['docx', 'xlsx', 'text'].includes(kind)) {
           const t = await textOf(full, kind);
           if (t) texts.push(`--- ${f.name} ---\n${t}`);
-          report.push({ name: f.name, kind, ok: !!t, info: t ? `${t.length} belgi matn o‘qildi` : 'matn topilmadi' });
+          report.push({ name: f.name, kind, role: role.id, roleTitle: role.title, ok: !!t, info: t ? `${t.length} belgi matn o‘qildi` : 'matn topilmadi' });
         } else {
-          report.push({ name: f.name, kind, ok: false, info: 'qo‘llanmaydigan format' });
+          report.push({ name: f.name, kind, role: role.id, roleTitle: role.title, ok: false, info: 'qo‘llanmaydigan format' });
         }
       } catch (e) {
-        report.push({ name: f.name, kind, ok: false, info: e.message });
+        report.push({ name: f.name, kind, role: 'unknown', roleTitle: ROLES.unknown.title, ok: false, info: e.message });
       }
     }
 
@@ -255,6 +326,7 @@ app.post('/api/analyze-batch', async (req, res, next) => {
       aiError,
       aiUsed: !!ai,
       floorSource,
+      etalon,
       docSize: parsedSize,
       source: dxfPlan ? `DXF: ${dxfFileName}` : 'AI hujjat tahlili',
       scheme
@@ -300,6 +372,15 @@ function recalcProject(p) {
   p.boq = chosen.boq;
   p.schedule = chosen.schedule;
   p.floorSummary = chosen.floorSummary;
+  // Etalon spetsifikatsiya bo'lsa — hisobni u bilan solishtirish
+  if (p.etalon?.sections?.length) {
+    p.specCheck = {
+      melki: compareToSpec(p.etalon, p.variants.melki.boq.rows),
+      krupny: compareToSpec(p.etalon, p.variants.krupny.boq.rows)
+    };
+  } else {
+    p.specCheck = null;
+  }
   p.updatedAt = new Date().toISOString();
   return p;
 }
@@ -323,6 +404,7 @@ app.post('/api/projects', (req, res, next) => {
       priceOverrides: {},
       opts: { ...validateOpts({ wallMaterial }), rentMode: 'buy', rentMonths: 1 },
       variant: VARIANTS[req.body?.variant] ? req.body.variant : DEFAULT_VARIANT,
+      etalon: validateEtalon(req.body?.etalon),
       createdAt: new Date().toISOString()
     };
     recalcProject(p);
@@ -359,6 +441,7 @@ app.put('/api/projects/:id', (req, res, next) => {
     if (name) p.name = String(name).slice(0, 80);
     if (plan) p.plan = validatePlan(plan);
     if (priceOverrides) p.priceOverrides = validatePriceOverrides(priceOverrides);
+    if (req.body?.etalon !== undefined) p.etalon = validateEtalon(req.body.etalon);
     recalcProject(p);
     db.saveProject(p);
     res.json(p);

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { api, som, qty } from '../api.js';
 import VariantCompare from './VariantCompare.jsx';
+import SpecCheck from './SpecCheck.jsx';
 
 // Spetsifikatsiya + smeta: apalka (qolip) va unga ketadigan mahsulotlar.
 // Narxlar ko'rsatiladi va har qator uchun qo'lda tahrirlanadi;
@@ -163,6 +164,8 @@ export default function MaterialsPanel({ project, onSaved, onUnauthorized }) {
           </div>
         ))}
       </div>
+
+      <SpecCheck project={project} />
 
       <VariantCompare project={project} onSelect={selectVariant} busy={busy} />
 

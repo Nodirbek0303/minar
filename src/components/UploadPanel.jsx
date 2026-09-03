@@ -5,11 +5,11 @@ import { api } from '../api.js';
 // Fayllar birga tahlil qilinadi, natija tasdiqlangach loyiha yaratiladi.
 
 const KIND_ICON = {
-  dxf: '📐', image: '🖼', pdf: '📕', docx: '📄', xlsx: '📊', text: '📝', other: '📎'
+  dxf: '📐', image: '🖼', pdf: '📕', docx: '📄', xlsx: '📊', text: '📝', cad: '⚠', other: '📎'
 };
 const KIND_NAME = {
   dxf: 'AutoCAD chizma', image: 'Rasm', pdf: 'PDF hujjat',
-  docx: 'Word hujjat', xlsx: 'Excel jadval', text: 'Matn', other: 'Boshqa'
+  docx: 'Word hujjat', xlsx: 'Excel jadval', text: 'Matn', cad: 'AutoCAD DWG', other: 'Boshqa'
 };
 
 const SCHEMES = [
@@ -32,6 +32,7 @@ const kindOf = (name) => {
   if (ext === '.docx') return 'docx';
   if (ext === '.xlsx') return 'xlsx';
   if (['.txt', '.csv'].includes(ext)) return 'text';
+  if (ext === '.dwg') return 'cad';
   return 'other';
 };
 
@@ -96,7 +97,9 @@ export default function UploadPanel({ onCreated, onUnauthorized }) {
     if (!result?.plan || busy) return;
     setBusy('Loyiha yaratilmoqda va hisoblanmoqda...');
     try {
-      const p = await api.createProject(result.plan.meta?.name || 'Yangi loyiha', result.plan, undefined, scheme);
+      const p = await api.createProject(
+        result.plan.meta?.name || 'Yangi loyiha', result.plan, undefined, scheme, result.etalon
+      );
       onCreated(p);
     } catch (e) {
       setBusy('');
@@ -223,7 +226,9 @@ function AnalysisReport({ result, onCreate, busy }) {
           <div className="phase-row" key={i}>
             <span>
               {f.ok ? '✅' : '⚠️'} {KIND_ICON[f.kind] || '📎'} {f.name}
-              <span className="small-muted"> — {KIND_NAME[f.kind] || f.kind}</span>
+              {f.roleTitle && (
+                <b style={{ color: 'var(--accent)' }}> · {f.roleTitle}</b>
+              )}
             </span>
             <span className="small-muted">{f.info}</span>
           </div>
@@ -237,6 +242,16 @@ function AnalysisReport({ result, onCreate, busy }) {
       )}
       {aiError && (
         <p className="small-muted" style={{ marginTop: 8 }}>ℹ {aiError}</p>
+      )}
+
+      {result.etalon && (
+        <div className="phase-row" style={{ display: 'block', lineHeight: 1.7 }}>
+          <b>📋 Etalon spetsifikatsiya:</b>{' '}
+          <span className="small-muted">
+            {result.etalon.total} pozitsiya — {result.etalon.sections.map((s) => `${s.title} (${s.items.length})`).join(' + ')}.
+            Loyiha yaratilgach hisob shu ro‘yxat bilan solishtiriladi.
+          </span>
+        </div>
       )}
 
       {plan && (

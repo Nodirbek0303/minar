@@ -56,22 +56,24 @@ export const MINAR = {
     return CATALOG.accessories.find((a) => a.name === name) || null;
   },
 
-  // ---- TU teleskopik ustunlar ----
-  // DIQQAT: bu guruh yuklangan Excel katalogida YO'Q (u faqat devor va ustun
-  // qolipini qamraydi). Quyidagi qiymatlar MINAR UZB.pdf katalogidan olingan
-  // va pol (perekrytiye) qolipi uchun ishlatiladi.
-  tu: [
-    { id: 'TU3.2',  name: 'Teleskopik ustun TU3,2',  range: [1.7, 2.0], weight: 9.84 },
-    { id: 'TU3.2L', name: 'Teleskopik ustun TU3,2 (uzun)', range: [1.7, 2.5], weight: 10.79 },
-    { id: 'TU3.7',  name: 'Teleskopik ustun TU3,7',  range: [2.0, 3.0], weight: 12.1 },
-    { id: 'TU3.7L', name: 'Teleskopik ustun TU3,7 (uzun)', range: [2.0, 3.5], weight: 13.17 },
-    { id: 'TU4.2',  name: 'Teleskopik ustun TU4,2',  range: [2.5, 4.2], weight: 14.57 },
-    { id: 'TU4.6',  name: 'Teleskopik ustun TU4,6',  range: [2.6, 4.6], weight: 15.86 },
-    { id: 'TU5.1',  name: 'Teleskopik ustun TU5,1',  range: [3.05, 5.1], weight: 17.26 }
-  ],
-  tuTripod: { name: 'Uch oyoq (stoyka triposer)', weight: 4.45 },
-  tuUnivilka: { name: 'Univilka (vilka)', weight: 1.4 },
-  tuSource: 'MINAR UZB.pdf (Excel katalogida pol qolipi yo\'q)'
+  // ---- POL (perekrytiye) qolipi ----
+  // DIQQAT: bu guruh yuklangan Excel katalogida YO'Q — u faqat devor va ustun
+  // qolipini qamraydi. Nomlar va me'yorlar TZ-13 loyihasining haqiqiy
+  // spetsifikatsiyasidan olingan (450 m² pol uchun).
+  deck: {
+    stoyka: [
+      { id: 'ST3.2', name: 'Телескопическая стойка СТ3,2', range: [1.7, 2.5], weight: 10.79 },
+      { id: 'ST3.7', name: 'Телескопическая стойка СТ3,7', range: [2.0, 3.5], weight: 13.17 },
+      { id: 'ST4.2', name: 'Телескопическая стойка СТ4,2', range: [2.5, 4.2], weight: 14.57 },
+      { id: 'ST4.6', name: 'Телескопическая стойка СТ4,6', range: [2.6, 4.6], weight: 15.86 },
+      { id: 'ST5.1', name: 'Телескопическая стойка СТ5,1', range: [3.05, 5.1], weight: 17.26 }
+    ],
+    univilka: { name: 'Унивилка', weight: 1.4 },
+    trenoga: { name: 'Тренога', weight: 4.45 },
+    balka: { name: 'Двутавровая балка 3 м', weight: 5.2 },
+    fanera: { name: 'Фанера ламинированная 2440*1220*18м', weight: 22.5 }
+  },
+  deckSource: 'TZ-13 spetsifikatsiyasi (Excel katalogida pol qolipi yo\'q)'
 };
 
 // Katalogdagi eng yaqin (kerakligidan kichik bo'lmagan) o'lchamni tanlash
@@ -92,11 +94,10 @@ export const FORMWORK_NORMS = {
   FACES: 2,
   // Panel ostidagi texnologik bo'shliq (qolip poldan 2 sm yuqorida yig'iladi).
   GAP_M: 0.02,
-  // Zamok: qo'shni panellar chokida, bir chokda 2 dona (yuqori va past).
-  // Panellar soni × 2 — qatordagi chekka choklar hisobga olingan taxminiy me'yor.
+  // Zamok (Замок клиновой): qo'shni panellar chokida, bir chokda 2 dona.
   ZAMOK_PER_PANEL: 2,
-  // Har zamokka bitta klin.
-  KLIN_PER_ZAMOK: 1,
+  // Anker torsevoy: panel chetlarini mahkamlash.
+  ANKER_PER_PANEL: 2,
   // Tyaga (tayrot): devor bo'ylab 0.9 m qadam, balandlik bo'yicha har 1.2 m da bir qator.
   TYAGA_STEP_M: 0.9,
   TYAGA_ROW_STEP_M: 1.2,
@@ -104,8 +105,22 @@ export const FORMWORK_NORMS = {
   GAYKA_PER_TYAGA: 2,
   // Tekislovchi balka (Балка выравнивающая): har 1.2 m balandlikda devor bo'ylab, 2 yuza.
   BEAM_ROW_STEP_M: 1.2,
-  // Push-pull tirgak (qiyalik tayanch): devor bo'ylab 2.4 m qadam, 2 yuza.
-  BRACE_STEP_M: 2.4,
+  // Push-pull tirgak (Подкос винтовой двухуровневый): devor bo'ylab 1.4 m qadam,
+  // BITTA yuzada (tashqi tomondan qo'yiladi). TZ-13 loyihasidan: 72 m devorga 52 dona.
+  BRACE_STEP_M: 1.4,
+  // Montaj podmostlari kronshteyni: har 15 m devorga 1 dona (TZ-13: 72 m → 4 dona)
+  KRONSHTEYN_STEP_M: 18,
+  // Montaj zahvati: butun obyektga 2 dona (TZ-13)
+  ZAHVAT_TOTAL: 2,
+
+  // ---- POL (perekrytiye) qolipi — TZ-13 spetsifikatsiyasidan ----
+  // Telefonlar: 450 m² pol uchun 660 stoyka, 660 univilka, 137 trenoga,
+  // 274 dvutavr balka, 151.5 fanera varag'i (2440×1220).
+  DECK_STOYKA_PER_M2: 660 / 450,      // ≈ 1.47 dona/m²
+  DECK_UNIVILKA_PER_STOYKA: 1,
+  DECK_TRENOGA_PER_STOYKA: 137 / 660, // ≈ har 4.8 stoykaga 1 uch oyoq
+  DECK_BALKA_PER_M2: 274 / 450,       // ≈ 0.61 dona/m²
+  DECK_FANERA_M2: 2.44 * 1.22,        // bitta varaq maydoni
   // Ustun qolipi: 40×40 sm ustun, perimetri 1.6 m (4 tomon × 0.4 m).
   COLUMN_SIZE_M: 0.4,
   // TU teleskopik ustun: pol (perekrytiye) qolipi uchun 1.5 m² ga 1 dona,
@@ -133,11 +148,14 @@ export function panelSpec(type, wMm, hMm) {
   };
 }
 
-// Qavat balandligiga mos teleskopik ustun modelini tanlash
-export function pickTU(heightM) {
+// Qavat balandligiga mos teleskopik stoyka modelini tanlash
+export function pickStoyka(heightM) {
   const h = Number(heightM) || 3;
-  return MINAR.tu.find((t) => h >= t.range[0] && h <= t.range[1]) || MINAR.tu[MINAR.tu.length - 1];
+  const list = MINAR.deck.stoyka;
+  return list.find((t) => h >= t.range[0] && h <= t.range[1]) || list[list.length - 1];
 }
+// Eski nom (moslik uchun)
+export const pickTU = pickStoyka;
 
 // Devor bog'lanish nuqtalari (burchak, T-qo'shilishlar) — shu yerlarda
 // ustunlar (40×40) qo'yiladi. Nuqta kamida 2 devorga tegishli bo'lishi kerak.
@@ -507,49 +525,46 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     const gayka = tyagaCnt * N.GAYKA_PER_TYAGA;
     // Tekislovchi balka qatorlari soni (balandlik bo'yicha)
     const horizRows = Math.max(1, Math.round(H / N.BEAM_ROW_STEP_M));
-    const braceCnt = Math.ceil(extLenTotal / N.BRACE_STEP_M) * N.FACES;
+    const braceCnt = Math.ceil(extLenTotal / N.BRACE_STEP_M); // faqat tashqi yuzada
 
-    // Barcha pozitsiyalar KATALOGDAN — nom, o'lcham, og'irlik aynan fayldagidek
+    // Barcha pozitsiyalar KATALOGDAN — nom, o'lcham, og'irlik aynan fayldagidek.
+    // Mahsulot tanlovi TZ-13 loyihasining haqiqiy spetsifikatsiyasiga mos:
+    // Замок клиновой, Анкер торцевой, Винт стяжной 1м (Тайрот), Гайка D90,
+    // Подкос винтовой двухуровневый, Кронштейн подмостей, Захват монтажный.
     const cat = (n) => MINAR.item(n);
 
-    addCat(fl, 'qolip_zamok', cat('Замок универсальный'), zamok);
-    addCat(fl, 'qolip_klin', cat('Клин'), klin);
-    addCat(fl, 'qolip_shkvoren', cat('Шкворень палец'), zamok);
+    addCat(fl, 'qolip_zamok', cat('Замок клиновой'), zamok);
+    addCat(fl, 'qolip_anker', cat('Анкер торцевой'), Math.ceil(panels * N.ANKER_PER_PANEL));
 
-    // Tyaga (tayrot): devor qalinligi + ikki tomondagi qolip va gaykalar uchun zaxira
+    // Tyaga (tayrot) — devor qalinligiga qarab katalogdan; TZ-13 da 1 m ishlatilgan
     const tie = pickByLength(
-      MINAR.ties.filter((t) => t.family === 'tie_blank'),
-      Math.round((maxThickness + 0.25) * 1000)
-    );
+      MINAR.ties.filter((t) => t.family === 'tie'),
+      Math.round((maxThickness + 0.4) * 1000)
+    ) || pickByLength(MINAR.ties, Math.round((maxThickness + 0.4) * 1000));
     addCat(fl, 'qolip_tyaga', tie, tyagaCnt);
     addCat(fl, 'qolip_gayka', cat('Гайка D90'), gayka);
-    addCat(fl, 'qolip_shayba', cat('Шайба 120х120х5'), gayka);
 
-    // Push-pull qiyalik tayanch — qavat balandligiga mos uzunlik katalogdan
+    // Push-pull qiyalik tayanch — ikki darajali, qavat balandligiga mos
     const brace = pickByLength(
-      MINAR.braces.filter((b) => b.family === 'brace_1' && b.len),
-      Math.round(H * 1.2 * 1000)
+      MINAR.braces.filter((b) => b.family === 'brace_2' && b.len),
+      Math.round(H * 0.95 * 1000)
     );
     addCat(fl, 'qolip_brace', brace, braceCnt);
-    addCat(fl, 'qolip_ogolovnik', cat('Оголовник подкоса'), braceCnt);
 
-    // Montaj zahvati — har ~40 panelga bitta
-    addCat(fl, 'qolip_zahvat', cat('Захват монтажный'), Math.max(2, Math.ceil(panels / 40)));
+    // Montaj podmostlari va zahvat
+    addCat(fl, 'qolip_kronshteyn', cat('Кронштейн подмостей, 1,10'),
+      Math.ceil(extLenTotal / N.KRONSHTEYN_STEP_M));
+    addCat(fl, 'qolip_zahvat', cat('Захват монтажный'), N.ZAHVAT_TOTAL);
 
-    // Tekislovchi balka — devor bo'ylab har gorizontal qatorga, ikki yuza
-    const beam = pickByLength(MINAR.beams.filter((b) => b.family === 'beam' && b.len), 1200);
-    if (beam) {
-      addCat(fl, 'qolip_balka', beam,
-        Math.ceil(extLenTotal / (beam.len / 1000)) * horizRows * N.FACES);
-    }
-
-    // --- Burchak elementlari: har tashqi burchakda, qavat balandligi bo'yicha ---
+    // --- Burchak elementlari: ЩУВ panellari (TZ-13 da shular ishlatilgan) ---
     const cornerCount = countCorners(extWalls);
     if (cornerCount > 0) {
-      const angOut = pickByLength(MINAR.angles.filter((a) => a.family === 'angle_out' && a.h), Math.round(H * 1000), 'h');
-      const angIn = pickByLength(MINAR.angles.filter((a) => a.family === 'angle_in' && a.h), Math.round(H * 1000), 'h');
-      if (angOut) addCat(fl, 'qolip_ugol_out', angOut, cornerCount * Math.ceil(H / (angOut.h / 1000)));
-      if (angIn) addCat(fl, 'qolip_ugol_in', angIn, cornerCount * Math.ceil(H / (angIn.h / 1000)));
+      // Qavat balandligiga mos ЩУВ burchak paneli
+      const hMm = Math.round(H * 1000);
+      const shuv = MINAR.corners
+        .filter((c) => c.family === 'щув' && c.h && Math.abs(c.h - hMm) <= 300 && c.kg)
+        .sort((a, b) => (a.a + a.b) - (b.a + b.b))[0];
+      if (shuv) addCat(fl, 'qolip_shuv', shuv, cornerCount * N.FACES);
     }
 
     // --- Ustun qolipi (ЩУР) — devor bog'lanish nuqtalarida ---
@@ -557,18 +572,23 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     if (cols.length) {
       const shur = pickByLength(MINAR.columns, Math.round(H * 1000), 'h');
       addCat(fl, 'qolip_ustun', shur, cols.length, ' — ustun qolipi');
-      addCat(fl, 'qolip_ustun_gayka', cat('ЩУР гайка литая / цинк'), cols.length * 4);
     }
 
-    // --- TU teleskopik ustunlar (pol/perekrytiye qolipi) ---
+    // --- POL (perekrytiye) qolipi — TZ-13 spetsifikatsiyasi me'yorlari ---
     const deckArea = deckAreaOf(plan, extWalls);
     if (deckArea > 0) {
-      const tu = pickTU(H);
-      const tuCnt = Math.ceil(deckArea / N.TU_AREA_PER_POST_M2);
-      // DIQQAT: pol qolipi Excel katalogida yo'q — bu uchtasi MINAR UZB.pdf dan
-      addCat(fl, 'qolip_tu', { name: tu.name + ` (${tu.range[0]}–${tu.range[1]} m)`, kg: tu.weight, unit: 'dona' }, tuCnt);
-      addCat(fl, 'qolip_uchoyoq', { name: MINAR.tuTripod.name, kg: MINAR.tuTripod.weight, unit: 'dona' }, tuCnt);
-      addCat(fl, 'qolip_univilka', { name: MINAR.tuUnivilka.name, kg: MINAR.tuUnivilka.weight, unit: 'dona' }, tuCnt);
+      const d = MINAR.deck;
+      const st = pickStoyka(H);
+      const stoykaCnt = Math.ceil(deckArea * N.DECK_STOYKA_PER_M2);
+      addCat(fl, 'qolip_stoyka', { name: st.name, kg: st.weight, unit: 'шт' }, stoykaCnt);
+      addCat(fl, 'qolip_univilka', { name: d.univilka.name, kg: d.univilka.weight, unit: 'шт' },
+        Math.ceil(stoykaCnt * N.DECK_UNIVILKA_PER_STOYKA));
+      addCat(fl, 'qolip_trenoga', { name: d.trenoga.name, kg: d.trenoga.weight, unit: 'шт' },
+        Math.ceil(stoykaCnt * N.DECK_TRENOGA_PER_STOYKA));
+      addCat(fl, 'qolip_balka_dv', { name: d.balka.name, kg: d.balka.weight, unit: 'шт' },
+        Math.ceil(deckArea * N.DECK_BALKA_PER_M2));
+      addCat(fl, 'qolip_fanera', { name: d.fanera.name, kg: d.fanera.weight, unit: 'шт' },
+        Math.ceil(deckArea / N.DECK_FANERA_M2));
     }
 
     // qavat bo'yicha yopilgan yuza — UI, spetsifikatsiya va 5D jadval shu raqamni ishlatadi

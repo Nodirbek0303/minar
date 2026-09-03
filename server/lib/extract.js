@@ -21,7 +21,10 @@ const run = promisify(execFile);
 // ============================================================
 
 export const SUPPORTED_EXT = new Set([
-  '.dxf', '.png', '.jpg', '.jpeg', '.webp', '.pdf', '.docx', '.xlsx', '.txt', '.csv'
+  '.dxf', '.png', '.jpg', '.jpeg', '.webp', '.pdf', '.docx', '.xlsx', '.txt', '.csv',
+  // DWG binar format — o'qib bo'lmaydi, lekin qabul qilinadi: foydalanuvchiga
+  // "DXF ga saqlang" degan aniq ko'rsatma beriladi (jim rad etishdan yaxshiroq)
+  '.dwg'
 ]);
 
 export function fileKind(nameOrExt) {
@@ -32,6 +35,7 @@ export function fileKind(nameOrExt) {
   if (ext === '.docx') return 'docx';
   if (ext === '.xlsx') return 'xlsx';
   if (['.txt', '.csv'].includes(ext)) return 'text';
+  if (ext === '.dwg') return 'cad';
   return 'other';
 }
 
@@ -124,14 +128,18 @@ export function xlsxText(buf) {
     const xml = zipRead(buf, e).toString('utf8');
     for (const row of xml.matchAll(/<row[^>]*>([\s\S]*?)<\/row>/g)) {
       const cells = [];
-      for (const c of row[1].matchAll(/<c([^>]*)>([\s\S]*?)<\/c>/g)) {
-        const attrs = c[1], body = c[2];
+      // MUHIM: o'z-o'zidan yopiladigan bo'sh kataklar (<c r="A5" s="7"/>) ham
+      // to'g'ri ushlanishi kerak — aks holda keyingi katakning qiymati
+      // bo'sh katakka yopishib, butun qator siljib ketadi.
+      // Ikki ko'rinish: <c .../> (bo'sh) va <c ...>...</c>
+      for (const c of row[1].matchAll(/<c\b([^>]*?)\/>|<c\b([^>]*?)>([\s\S]*?)<\/c>/g)) {
+        const attrs = (c[1] ?? c[2]) || '', body = c[3] || '';
         const tm = /\bt="([^"]+)"/.exec(attrs);
         const type = tm ? tm[1] : '';
         const vm = /<v>([\s\S]*?)<\/v>/.exec(body);
         let val = vm ? vm[1] : '';
         // t="s" — umumiy satrlar jadvalidagi indeks; t="inlineStr" — ichma-ich matn
-        if (type === 's') val = shared[Number(val)] ?? '';
+        if (type === 's' && val !== '') val = shared[Number(val)] ?? '';
         else if (type === 'inlineStr' || (!val && /<is>/.test(body))) {
           val = xmlToText(body, { paraTags: [], tabTags: [] }).replace(/\s+/g, ' ').trim();
         }

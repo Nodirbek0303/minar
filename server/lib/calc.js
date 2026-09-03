@@ -413,7 +413,8 @@ export function computeFloorSummary(boq, perFloor) {
     'qolip_panel', 'qolip_zamok', 'qolip_klin', 'qolip_shkvoren', 'qolip_tyaga', 'qolip_gayka',
     'qolip_shayba', 'qolip_brace', 'qolip_ogolovnik', 'qolip_zahvat', 'qolip_balka',
     'qolip_ugol_out', 'qolip_ugol_in', 'qolip_ustun', 'qolip_ustun_gayka',
-    'qolip_tu', 'qolip_uchoyoq', 'qolip_univilka'
+    'qolip_anker', 'qolip_kronshteyn', 'qolip_shuv',
+    'qolip_stoyka', 'qolip_univilka', 'qolip_trenoga', 'qolip_balka_dv', 'qolip_fanera'
   ]);
   return (perFloor || []).map((f) => {
     const rows = boq.rows.filter((r) => r.floorId === f.id);

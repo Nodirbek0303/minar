@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MINAR, FORMWORK_NORMS, fillLinear, layoutWallFace, layoutWallFaceWithOpenings,
-  computeFormwork, panelSpec, pickTU, exteriorWallsOf, openingsOfWall, deckAreaOf
+  computeFormwork, panelSpec, pickStoyka, exteriorWallsOf, openingsOfWall, deckAreaOf
 } from '../shared/formwork.js';
 
 const FL = (over = {}) => ({
@@ -80,13 +80,13 @@ test('spetsifikatsiya nomlari katalogdagidek', () => {
   const { rows } = computeFormwork({ plan, floors: [FL()], rates: {} });
   const names = rows.map((r) => r.name);
   assert.ok(names.some((n) => n.startsWith('КМО (Щит)')), 'panel nomi katalogdan');
-  assert.ok(names.some((n) => n.startsWith('Замок универсальный')), 'zamok');
-  assert.ok(names.some((n) => n.startsWith('Клин')), 'klin');
+  assert.ok(names.some((n) => n.startsWith('Замок клиновой')), 'zamok');
+  assert.ok(names.some((n) => n.startsWith('Анкер торцевой')), 'anker');
   assert.ok(names.some((n) => n.startsWith('Винт стяжной')), 'tyaga');
   assert.ok(names.some((n) => n.startsWith('Гайка D90')), 'gayka');
   assert.ok(names.some((n) => n.startsWith('Подкос винтовой')), 'podkos');
   assert.ok(names.some((n) => n.startsWith('ЩУР')), 'ustun qolipi');
-  assert.ok(names.some((n) => n.startsWith('Угол')), 'burchak elementi');
+  assert.ok(names.some((n) => n.startsWith('ЩУВ')), 'burchak paneli');
 });
 
 test('layoutWallFace: panellar yig\'indisi devor balandligini qoplaydi', () => {
@@ -131,10 +131,11 @@ test('panelSpec: maydon o\'lchamdan, og\'irlik katalogdan', () => {
   assert.equal(s.weight, 18.72); // Excel dagi qiymat
 });
 
-test('pickTU: qavat balandligiga mos model tanlanadi', () => {
-  assert.equal(pickTU(1.8).id, 'TU3.2');
-  assert.equal(pickTU(2.8).id, 'TU3.7');
-  assert.equal(pickTU(4.0).id, 'TU4.2');
+test('pickStoyka: qavat balandligiga mos teleskopik stoyka tanlanadi', () => {
+  assert.equal(pickStoyka(2.0).id, 'ST3.2');
+  assert.equal(pickStoyka(3.0).id, 'ST3.7');
+  assert.equal(pickStoyka(4.0).id, 'ST4.2');
+  assert.equal(pickStoyka(3.0).name, 'Телескопическая стойка СТ3,7');
 });
 
 test('computeFormwork: IKKI yuza hisoblanadi', () => {
@@ -148,16 +149,42 @@ test('computeFormwork: IKKI yuza hisoblanadi', () => {
 test('computeFormwork: barcha guruhlar spetsifikatsiyada bor', () => {
   const { rows } = computeFormwork({ plan: boxPlan(), floors: [FL()], rates: {} });
   const keys = new Set(rows.map((r) => r.baseKey));
-  for (const k of ['qolip_panel', 'qolip_zamok', 'qolip_klin', 'qolip_tyaga', 'qolip_gayka',
-    'qolip_shayba', 'qolip_brace', 'qolip_balka', 'qolip_ugol_out', 'qolip_ustun',
-    'qolip_tu', 'qolip_uchoyoq', 'qolip_univilka']) {
+  for (const k of ['qolip_panel', 'qolip_zamok', 'qolip_anker', 'qolip_tyaga', 'qolip_gayka',
+    'qolip_brace', 'qolip_kronshteyn', 'qolip_ustun',
+    'qolip_stoyka', 'qolip_univilka', 'qolip_trenoga', 'qolip_balka_dv', 'qolip_fanera']) {
     assert.ok(keys.has(k), 'yetishmayapti: ' + k);
   }
-  const tu = rows.find((r) => r.baseKey === 'qolip_tu');
-  // 16 m² pol / 1.5 = 11 dona
-  assert.equal(tu.qty, Math.ceil(16 / FORMWORK_NORMS.TU_AREA_PER_POST_M2));
-  const tripod = rows.find((r) => r.baseKey === 'qolip_uchoyoq');
-  assert.equal(tripod.qty, tu.qty, 'har ustunga bitta uch oyoq');
+  // Pol qolipi: 16 m² uchun TZ-13 me'yorlari bo'yicha
+  const stoyka = rows.find((r) => r.baseKey === 'qolip_stoyka');
+  assert.equal(stoyka.qty, Math.ceil(16 * FORMWORK_NORMS.DECK_STOYKA_PER_M2));
+  const univilka = rows.find((r) => r.baseKey === 'qolip_univilka');
+  assert.equal(univilka.qty, stoyka.qty, 'har stoykaga bitta univilka');
+});
+
+test('POL QOLIPI: TZ-13 etaloniga mos (450 m² uchun)', () => {
+  // Haqiqiy loyiha: 450 m² pol → 660 stoyka, 660 univilka, 137 trenoga,
+  // 274 dvutavr balka, 151.5 fanera. Me'yorlar aynan shundan olingan.
+  const N = FORMWORK_NORMS;
+  assert.equal(Math.round(450 * N.DECK_STOYKA_PER_M2), 660);
+  assert.equal(Math.round(450 * N.DECK_STOYKA_PER_M2 * N.DECK_TRENOGA_PER_STOYKA), 137);
+  assert.equal(Math.round(450 * N.DECK_BALKA_PER_M2), 274);
+  assert.equal(Math.round(450 / N.DECK_FANERA_M2), 151);
+});
+
+test('MAHSULOT TANLOVI TZ-13 spetsifikatsiyasiga mos', () => {
+  const { rows } = computeFormwork({ plan: boxPlan(), floors: [FL({ formwork: { type: 'ksho' } })], rates: {} });
+  const has = (n) => rows.some((r) => r.name.startsWith(n));
+  // Etalonda aynan shu mahsulotlar bor
+  for (const n of ['Замок клиновой', 'Анкер торцевой', 'Винт стяжной БМ/16/, 1м',
+    'Гайка D90', 'Подкос винтовой двухуровневый', 'Кронштейн подмостей',
+    'Захват монтажный', 'ЩУВ', 'ЩУР', 'Телескопическая стойка', 'Унивилка',
+    'Тренога', 'Двутавровая балка', 'Фанера ламинированная']) {
+    assert.ok(has(n), 'etalondagi pozitsiya yo\'q: ' + n);
+  }
+  // Etalonda YO'Q pozitsiyalar chiqmasligi kerak
+  for (const n of ['Замок универсальный', 'Клин', 'Шкворень палец', 'Шайба', 'Оголовник']) {
+    assert.ok(!has(n), 'etalonda yo\'q pozitsiya chiqdi: ' + n);
+  }
 });
 
 test('computeFormwork: arenda rejimi oylik tarif × oylar bo\'yicha narxlaydi', () => {
@@ -170,10 +197,10 @@ test('computeFormwork: arenda rejimi oylik tarif × oylar bo\'yicha narxlaydi', 
   const zamok1 = rent1.rows.find((r) => r.baseKey === 'qolip_zamok');
   const zamok3 = rent3.rows.find((r) => r.baseKey === 'qolip_zamok');
 
-  // Замок универсальный = 4.5 kg (katalogdan); narx og'irlik × kg tarifi
-  assert.equal(zamokBuy.matRateOverride, Math.round(4.5 * 18000), 'sotib olish: 4.5 kg × 18000');
-  assert.equal(zamok1.matRateOverride, Math.round(4.5 * 4000), 'arenda 1 oy: 4.5 kg × 4000');
-  assert.equal(zamok3.matRateOverride, Math.round(4.5 * 4000 * 3), '3 oy = 3 × oylik');
+  // Замок клиновой = 2.8 kg (katalogdan); narx og'irlik × kg tarifi
+  assert.equal(zamokBuy.matRateOverride, Math.round(2.8 * 18000), 'sotib olish: 2.8 kg × 18000');
+  assert.equal(zamok1.matRateOverride, Math.round(2.8 * 4000), 'arenda 1 oy: 2.8 kg × 4000');
+  assert.equal(zamok3.matRateOverride, Math.round(2.8 * 4000 * 3), '3 oy = 3 × oylik');
   assert.equal(zamok1.qty, zamok3.qty, 'miqdor oylardan o\'zgarmasligi kerak');
 });
 

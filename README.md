@@ -64,6 +64,22 @@ Provayder kalit ko'rinishidan avtomatik aniqlanadi (yoki `AI_PROVIDER` bilan maj
 | `sk-ant-...` | **Anthropic (Claude)** — rasmiy SDK | PDF **rasmga o'girilmaydi**, hujjat sifatida to'g'ridan-to'g'ri o'qiladi; natija `strict` tool sxemasi bilan kafolatlanadi (JSON hech qachon buzuq kelmaydi); standart model `claude-opus-5`, adaptiv fikrlash bilan |
 | boshqasi | OpenAI-mos API | `/chat/completions`, PDF sahifalari rasmga o'giriladi |
 
+## Hujjat rollari va etalon spetsifikatsiya
+
+Yuklangan har bir fayl **roli** aniqlanadi (fayl nomi va ichidagi matn bo'yicha):
+
+| Rol | Nimadan aniqlanadi | Nima qilinadi |
+|---|---|---|
+| 📋 Spetsifikatsiya | "Спецификация", jadval sarlavhasi (Наименование/Кол-во) | **Etalon** sifatida olinadi — hisob u bilan qator-qator solishtiriladi |
+| 🧱 Devor qolipi rejasi | "Монолитная стена", "крупнощитовой/мелкощитовой опалубки" | Chizma sifatida AI ga beriladi |
+| ▤ Perekrytiye rejasi | "перекрытий" | Pol qolipi geometriyasi |
+| ━ Rigel rejasi | "ригел" | Balka qolipi |
+| ▮ Ustun rejasi | "колонн" | ЩУР ustun qolipi |
+| ⚠ DWG | `.dwg` kengaytmasi | **O'qilmaydi** — AutoCAD da "Save As → DXF" kerakligi aytiladi |
+
+Etalon topilsa, "Materiallar va narx" bo'limida **solishtirish jadvali** chiqadi:
+✓ mos · ≠ farq qiladi · ✗ hisobda yo'q · + etalonda yo'q. Farq foizi bilan ko'rsatiladi.
+
 ## Kirish nazorati
 
 | `.env` da `APP_PASSWORD` | Natija |
