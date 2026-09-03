@@ -33,6 +33,33 @@ function readDbFile() {
 // Yagona xotiradagi holat
 const state = readDbFile();
 
+// ------------------------------------------------------------
+//  Zaxira nusxa. Server har ishga tushganda joriy db.json ning
+//  nusxasi saqlanadi. Deploy, qo'lda tahrir yoki xato yozuv
+//  ma'lumotni yo'qotsa, nusxadan tiklash mumkin.
+// ------------------------------------------------------------
+const BACKUP_KEEP = 10;
+
+function makeBackup() {
+  try {
+    if (!fs.existsSync(DB_FILE)) return;
+    if (!state.projects.length && !Object.keys(state.files).length) return;
+    const dir = path.join(DATA_DIR, 'backups');
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    fs.copyFileSync(DB_FILE, path.join(dir, `db-${stamp}.json`));
+    // eskilarini tozalash
+    const files = fs.readdirSync(dir).filter((f) => f.startsWith('db-')).sort();
+    for (const f of files.slice(0, Math.max(0, files.length - BACKUP_KEEP))) {
+      fs.unlinkSync(path.join(dir, f));
+    }
+    console.log(`  Zaxira: ${state.projects.length} loyiha saqlandi (data/backups/)`);
+  } catch (e) {
+    console.warn('[zaxira] nusxa olinmadi:', e.message);
+  }
+}
+makeBackup();
+
 // Yozuv navbati: bir vaqtda faqat bitta yozuv, keyingisi kutadi
 let writing = null;
 let pending = false;

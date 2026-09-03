@@ -6,3 +6,5 @@ server/data/uploads/
 *.tmp
 *.log
 .DS_Store
+
+server/data/backups/
