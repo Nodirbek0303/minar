@@ -106,6 +106,10 @@ export default function Viewer5D({ project }) {
   const floors = project.plan?.floors?.length ? project.plan.floors
     : (project.quantities?.perFloor || [{ id: 'fl0', name: '1-qavat', height: 3, facade: true }]);
 
+  // Tanlangan tizim (мелкощитовая / крупнощитовая) — 3D aynan shu panellarni chizadi
+  const variantId = project.variant || 'melki';
+  const variant = project.variants?.[variantId] || null;
+
   useEffect(() => { selFloorRef.current = selFloor; }, [selFloor]);
   useEffect(() => {
     formworkOnlyRef.current = formworkOnly;
@@ -118,6 +122,9 @@ export default function Viewer5D({ project }) {
     if (!mount || !project) return;
     const plan = project.plan;
     const wallMaterial = project.opts?.wallMaterial || 'brick';
+    // Panel oilasi tanlangan variantdan olinadi — spetsifikatsiya bilan bir xil
+    const vType = project.variants?.[project.variant || 'melki']?.fwType
+      || ((project.variant || 'melki') === 'krupny' ? 'ksho' : 'msho');
     const flDef = (plan.floors?.length ? plan.floors : [{ id: 'fl0', name: '1-qavat', height: plan.walls?.[0]?.height || 3, facade: true }])
       .map((f) => ({ ...f, height: Math.max(0.5, Number(f.height) || 3) }));
     const N = flDef.length;
@@ -253,7 +260,9 @@ export default function Viewer5D({ project }) {
 
         // --- Devor yuzasi qoplami ---
         if (isExt && extSign !== 0 && fl.facade !== false) {
-          const fwType = fl.formwork?.type || 'classic';
+          // Qavatga 'classic' (vent-fasad) tanlangan bo'lsa o'sha qoladi,
+          // aks holda TANLANGAN VARIANT panel oilasi chiziladi
+          const fwType = fl.formwork?.type === 'classic' ? 'classic' : vType;
           if (fwType === 'ksho' || fwType === 'msho') {
             // MINAR qolip panellari — katalog o'lchamlari bilan aniq sxema
             const colorHex = (MINAR.colors.find((c) => c.id === (fl.formwork.color || 'RAL3020')) || MINAR.colors[0]).hex;
@@ -615,6 +624,12 @@ export default function Viewer5D({ project }) {
             <div className="v">{project.quantities?.facadeArea || 0} m²</div>
             <div className="l">apalka (qolip) maydoni</div>
           </div>
+          {variant && (
+            <div className="hud-card">
+              <div className="v" style={{ color: variant.color, fontSize: 15 }}>{variant.title}</div>
+              <div className="l">{variant.subtitle}</div>
+            </div>
+          )}
           {selInfo && (
             <div className="hud-card">
               <div className="v">{selInfo.name}</div>
@@ -687,12 +702,17 @@ export default function Viewer5D({ project }) {
         <div className="legend">
           <span><span className="dot" style={{ background: '#9c7a5b' }} />Devor (beton/g'isht)</span>
           <span><span className="dot" style={{ background: '#7ec8ff' }} />Oyna</span>
-          <span><span className="dot" style={{ background: '#c22a1e' }} />MINAR qolip (apalka)</span>
+          <span>
+            <span className="dot" style={{ background: variant?.color || '#c22a1e' }} />
+            {variant ? variant.subtitle : 'MINAR qolip (apalka)'}
+          </span>
           <span><span className="dot" style={{ background: '#55575c' }} />Tekislovchi balka</span>
           <span><span className="dot" style={{ background: '#4a4a4e' }} />Tyaga (tayrot)</span>
         </div>
         <p className="small-muted" style={{ marginTop: 8 }}>
-          💡 Standart qoida: qolip <b>faqat podval va 1-qavatga</b> qo'yiladi — qavat soni qancha bo'lishidan qat'i nazar.
+          💡 3D da <b>{variant ? variant.title : 'tanlangan'}</b> tizimi chizilgan — "Materiallar va narx" bo'limida
+          variantni almashtirsangiz, chizma ham o'sha panellar bilan qayta quriladi.<br />
+          Standart qoida: qolip <b>faqat podval va 1-qavatga</b> qo'yiladi — qavat soni qancha bo'lishidan qat'i nazar.
           Yuqori qavatlar 3D dan yashiriladi; butun binoni ko'rish uchun "Faqat qolip qavatlari" belgisini oling.
           Qavatni tanlasangiz, boshqa qavatlar shaffof bo'lib, shu qavatning apalka joylashuvi yaqqol ko'rinadi.
           🥽 <b>VR rejimi:</b> HTTPS orqali ochib VR qo'lqoynini ulang.

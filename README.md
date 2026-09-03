@@ -131,6 +131,8 @@ kiritiladi. Katalogda og'irligi ko'rsatilmagan pozitsiyalar qatorida shu haqda y
 | Xususiyati | Qo'lda ko'tariladi, murakkab shakllarga mos; pozitsiya va zamok ko'p | Kran bilan o'rnatiladi, montaj tez, chok kam; tor joylarni yopolmaydi |
 
 Ikkalasi ham **to'liq alohida** hisoblanadi (`computeVariants`) — mijoz taqqoslab tanlaydi.
+Tanlangan variant **5D chizmaga ham** tushadi: 3D da aynan o'sha panel oilasi (КМО yoki ЩЛ)
+katalog o'lchamlarida joylanadi, HUD va legendada tizim nomi ko'rsatiladi.
 Katta panellar tor joylarga sig'masa, o'sha yuza `skippedArea` da ko'rsatiladi (proyom qutisi
 bilan yopiladi). Narx qo'lda tahrirlansa faqat tanlangan variantga tegishli bo'ladi.
 

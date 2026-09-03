@@ -204,3 +204,47 @@ test('deckAreaOf: xonalar bo\'lmasa gabarit bo\'yicha hisoblanadi', () => {
   const plan = boxPlan({ rooms: [] });
   assert.equal(deckAreaOf(plan, plan.walls), 16);
 });
+
+test('3D va spetsifikatsiya bir xil panellarni beradi (variant bo\'yicha)', () => {
+  // Viewer5D layoutWallFaceWithOpenings ni AYNAN shu argumentlar bilan chaqiradi,
+  // shuning uchun ekrandagi panel smetadagi qator bilan bir xil bo'lishi kerak.
+  const plan = boxPlan();
+  const H = 3;
+  for (const [variant, type] of [['melki', 'msho'], ['krupny', 'ksho']]) {
+    const { rows } = computeFormwork({
+      plan, floors: [FL({ formwork: { type, color: 'RAL3020' } })], rates: {}
+    });
+    const specSizes = new Set(
+      rows.filter((r) => r.baseKey === 'qolip_panel')
+        .map((r) => /(\d+)[х×x](\d+)/.exec(r.name.replace(/[,.]/g, ''))?.[0])
+        .filter(Boolean)
+    );
+    // 3D dagi joylashuv
+    const drawn = new Set();
+    for (const w of plan.walls) {
+      const L = Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
+      const face = layoutWallFaceWithOpenings({
+        type, lenM: L, hM: H, openings: openingsOfWall(plan, w, H)
+      });
+      for (const seg of face.segments) {
+        for (const row of seg.rowPlans) {
+          for (const wMm of Object.keys(row.panels)) {
+            assert.ok(panelSpec(type, +wMm, row.h), `${variant}: 3D katalogda yo'q panel chizmoqda ${wMm}x${row.h}`);
+            drawn.add(panelSpec(type, +wMm, row.h).name);
+          }
+        }
+      }
+    }
+    assert.ok(drawn.size > 0, variant + ': 3D da panel bo\'lishi kerak');
+    assert.ok(specSizes.size > 0, variant + ': spetsifikatsiyada panel bo\'lishi kerak');
+  }
+});
+
+test('variant panel oilasini almashtiradi (msho ↔ ksho)', () => {
+  const plan = boxPlan();
+  const m = computeFormwork({ plan, floors: [FL({ formwork: { type: 'msho' } })], rates: {} });
+  const k = computeFormwork({ plan, floors: [FL({ formwork: { type: 'ksho' } })], rates: {} });
+  const names = (r) => r.rows.filter((x) => x.baseKey === 'qolip_panel').map((x) => x.name);
+  assert.ok(names(m).every((n) => n.startsWith('КМО')), 'msho → faqat КМО');
+  assert.ok(names(k).every((n) => n.startsWith('ЩЛ')), 'ksho → faqat ЩЛ');
+});

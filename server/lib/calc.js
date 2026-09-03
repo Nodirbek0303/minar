@@ -327,6 +327,7 @@ export function computeVariant(plan, variantId, opts = {}) {
   applyPriceOverrides(boq, opts.priceOverrides);
   return {
     id: v.id,
+    fwType: v.fwType,   // 3D shu panel oilasini chizadi (msho=КМО, ksho=ЩЛ)
     title: v.title,
     subtitle: v.subtitle,
     hint: v.hint,
