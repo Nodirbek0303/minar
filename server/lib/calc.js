@@ -208,9 +208,8 @@ export function computeQuantities(plan, opts = {}) {
     elev += H;
   }
 
-  // Qolip qatorlari — faqat apalkasi yoqilgan qavatlar uchun
-  const onFloors = new Set(floors.filter((f) => f.facade).map((f) => f.id));
-  items.push(...fw.rows.filter((r) => onFloors.has(r.floorId)));
+  // Qolip qatorlari (computeFormwork apalkasi o'chirilgan qavatlarni o'tkazib yuboradi)
+  items.push(...fw.rows);
 
   const sum = (key) => +perFloor.reduce((s, f) => s + (f[key] || 0), 0).toFixed(2);
   const quantities = {

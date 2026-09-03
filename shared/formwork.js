@@ -412,6 +412,9 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
   };
 
   for (const fl of floors) {
+    // Apalka o'chirilgan qavat uchun umuman hisob yuritilmaydi —
+    // aks holda qavat kartochkasida panel soni ko'rinib qolardi.
+    if (fl.facade === false) continue;
     const fw = fl.formwork;
     if (!fw || !fw.type || fw.type === 'classic') continue;
     const type = fw.type === 'ksho' ? 'ksho' : 'msho';

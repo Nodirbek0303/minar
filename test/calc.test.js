@@ -132,3 +132,41 @@ test('barcha miqdorlar va summalar chekli son', () => {
   }
   assert.ok(Number.isFinite(schedule.totalDays) && schedule.totalDays >= 1);
 });
+
+test('apalkasi o\'chirilgan qavatda panel soni ham nol bo\'ladi', () => {
+  const plan = samplePlan();
+  plan.floors = [
+    { id: 'pod', name: 'Podval', height: 2.8, facade: true, underground: true, formwork: { type: 'msho', color: 'RAL3020' } },
+    { id: 'f1', name: '1-qavat', height: 3, facade: true, formwork: { type: 'msho', color: 'RAL3020' } },
+    { id: 'f2', name: '2-qavat', height: 3, facade: false, formwork: { type: 'msho', color: 'RAL3020' } }
+  ];
+  const { q, boq, summary } = calc(plan);
+  const off = q.perFloor.find((f) => f.id === 'f2');
+  assert.equal(off.facadeArea, 0, 'yuza nol bo\'lishi kerak');
+  assert.equal(off.panelCount, 0, 'panel soni ham nol bo\'lishi kerak');
+  assert.equal(off.skippedArea, 0);
+  const offSum = summary.find((s) => s.id === 'f2');
+  assert.equal(offSum.panelCount, 0);
+  assert.equal(offSum.rows, 0);
+  assert.equal(offSum.total, 0);
+  assert.equal(boq.rows.filter((r) => r.floorId === 'f2').length, 0);
+  // yoqilgan qavatlar o'z hisobini yo'qotmasligi kerak
+  for (const id of ['pod', 'f1']) {
+    const on = q.perFloor.find((f) => f.id === id);
+    assert.ok(on.facadeArea > 0 && on.panelCount > 0, id + ' hisoblanmadi');
+  }
+  // jami — faqat yoqilgan ikki qavat
+  assert.equal(q.panelCount, q.perFloor.filter((f) => f.facade).reduce((s, f) => s + f.panelCount, 0));
+});
+
+test('podval yer ostida joylashadi va balandlikka qo\'shiladi', () => {
+  const plan = samplePlan();
+  plan.floors = [
+    { id: 'pod', name: 'Podval', height: 2.8, facade: true, underground: true, formwork: { type: 'msho' } },
+    { id: 'f1', name: '1-qavat', height: 3, facade: true, formwork: { type: 'msho' } }
+  ];
+  const { q } = calc(plan);
+  assert.equal(q.perFloor[0].elevation, -2.8, 'podval sathi manfiy bo\'lishi kerak');
+  assert.equal(q.perFloor[1].elevation, 0, '1-qavat yer sathidan boshlanadi');
+  assert.equal(q.totalHeight, 3, 'yer ustidagi balandlik');
+});
