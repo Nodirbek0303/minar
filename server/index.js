@@ -398,10 +398,36 @@ app.post('/api/ai/chat', async (req, res, next) => {
     const p = db.getProject(projectId);
     if (p) {
       const q = p.quantities || {};
-      context = `Loyiha: ${p.name}; qavatlar ${q.floorCount}; bino balandligi ${q.totalHeight} m; ` +
-        `qolip (apalka) yuzasi ${q.facadeArea} m2 (ikki yuza, ochiqliklar chegirilgan); ` +
-        `panellar ${q.panelCount} dona; montaj muddati ${p.schedule?.totalDays} kun; ` +
-        `smeta ${p.boq?.total} so'm (${q.rent ? 'arenda ' + q.rentMonths + ' oy' : 'sotib olish'}).`;
+      const som = (n) => Math.round(Number(n) || 0).toLocaleString('uz-UZ');
+      // AI taxmin qilmasligi uchun kontekstga QAVAT KESIMI va asosiy
+      // pozitsiyalar to'liq beriladi — javob hisoblangan raqamlardan chiqadi
+      const floors = (p.floorSummary || []).map((f) => (
+        f.facade
+          ? `  · ${f.name} (h=${f.height} m): qolip ${f.facadeArea} m2, ${f.panelCount} panel, ` +
+            `${f.rows} pozitsiya, ${som(f.total)} so'm`
+          : `  · ${f.name} (h=${f.height} m): APALKA QO'YILMAYDI — hisobga kirmaydi`
+      )).join('\n');
+
+      // Har qavat uchun asosiy aksessuar miqdorlari
+      const byFloor = {};
+      for (const r of p.boq?.rows || []) {
+        (byFloor[r.floorName] ||= []).push(`${r.name.replace(/\s*\(.*?\)\s*/g, ' ').trim()}: ${r.qty} ${r.unit}`);
+      }
+      const items = Object.entries(byFloor)
+        .map(([fl, list]) => `  ${fl}:\n    ${list.join('\n    ')}`)
+        .join('\n');
+
+      context =
+        `Loyiha: ${p.name}\n` +
+        `Qavatlar: ${q.floorCount} ta, yer usti balandligi ${q.totalHeight} m\n` +
+        `Narxlash rejimi: ${q.rent ? 'ARENDA, ' + q.rentMonths + ' oy' : 'sotib olish'}\n` +
+        `JAMI: qolip yuzasi ${q.facadeArea} m2 (ikki yuza, eshik/deraza chegirilgan), ` +
+        `${q.panelCount} panel, ${p.boq?.rows?.length} pozitsiya, ${som(p.boq?.total)} so'm, ` +
+        `montaj ${p.schedule?.totalDays} kun\n` +
+        `QAVAT KESIMI:\n${floors}\n` +
+        `SPETSIFIKATSIYA (qavat bo'yicha):\n${items}\n` +
+        `MUHIM: bu raqamlar platformada hisoblangan — javob berganda aynan shulardan foydalaning, ` +
+        `qayta taxmin qilmang va jamini qavatlarga bo'lmang.`;
     }
   }
   try {
