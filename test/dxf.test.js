@@ -142,3 +142,23 @@ test('validateRates: faqat mantiqiy sonlar o\'tadi', () => {
   const r = validateRates({ minar_zamok: '150000', yomon: 'abc', manfiy: -5, 'BAD KEY': 10 });
   assert.deepEqual(r, { minar_zamok: 150000 });
 });
+
+// ---------- auth.js ----------
+
+test('requireAuth: statik sahifa ochiq, /api va /files himoyalangan', async () => {
+  process.env.APP_PASSWORD = 'sinov';
+  const { requireAuth } = await import('../server/lib/auth.js');
+  const mw = requireAuth(['/api/login']);
+  const run = (path) => new Promise((resolve) => {
+    const req = { path, method: 'GET', headers: {} };
+    const res = { status: (c) => ({ json: () => resolve(c) }) };
+    mw(req, res, () => resolve(200));
+  });
+  assert.equal(await run('/'), 200, 'SPA qobig\'i ochiq bo\'lishi kerak');
+  assert.equal(await run('/assets/index.js'), 200, 'statik fayllar ochiq');
+  assert.equal(await run('/project/abc'), 200, 'SPA marshruti ochiq');
+  assert.equal(await run('/api/login'), 200, 'kirish endpointi ochiq');
+  assert.equal(await run('/api/projects'), 401, 'API himoyalangan bo\'lishi kerak');
+  assert.equal(await run('/files/chizma.dxf'), 401, 'yuklangan fayllar himoyalangan');
+  delete process.env.APP_PASSWORD;
+});

@@ -81,11 +81,16 @@ export function clearSessionCookie(res) {
   res.setHeader('Set-Cookie', `${COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0`);
 }
 
+// Faqat ma'lumot beradigan yo'llar himoyalanadi. Statik sahifa (SPA qobig'i)
+// ochiq qoladi — aks holda foydalanuvchi kirish ekranini ham ko'ra olmaydi.
+const PROTECTED_PREFIXES = ['/api', '/files'];
+
 // Himoya middleware: ochiq yo'llar ro'yxatidan tashqari hamma narsa uchun
 export function requireAuth(openPaths = []) {
   return (req, res, next) => {
     if (!authEnabled()) return next();
     if (req.method === 'OPTIONS') return next();
+    if (!PROTECTED_PREFIXES.some((p) => req.path === p || req.path.startsWith(p + '/'))) return next();
     if (openPaths.some((p) => req.path === p)) return next();
     if (validSession(sessionToken(req))) return next();
     res.status(401).json({ error: 'Kirish talab qilinadi', auth: true });
