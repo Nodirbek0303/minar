@@ -30,11 +30,25 @@ export const api = {
     if (!res.ok) throw new ApiError(data.error || 'Fayl yuklanmadi', res.status, data);
     return data;
   },
+  // Bir vaqtda bir necha fayl yuklash
+  uploadMany: async (files) => {
+    const fd = new FormData();
+    for (const f of files) fd.append('files', f);
+    const res = await fetch('/api/upload', { method: 'POST', credentials: 'include', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(data.error || 'Fayllar yuklanmadi', res.status, data);
+    return data;
+  },
   // units: undefined | 'mm' | 'cm' | 'm' — chizma birligini qo'lda ko'rsatish
   analyze: (fileId, units) => req('/api/analyze', { method: 'POST', body: JSON.stringify({ fileId, units }) }),
+  // Barcha yuklangan hujjatlarni BIRGA tahlil qilish
+  analyzeBatch: (fileIds, { units, scheme } = {}) =>
+    req('/api/analyze-batch', { method: 'POST', body: JSON.stringify({ fileIds, units, scheme }) }),
+  capabilities: () => req('/api/capabilities'),
   listProjects: () => req('/api/projects'),
   getProject: (id) => req('/api/projects/' + id),
-  createProject: (name, plan, wallMaterial) => req('/api/projects', { method: 'POST', body: JSON.stringify({ name, plan, wallMaterial }) }),
+  createProject: (name, plan, wallMaterial, scheme) =>
+    req('/api/projects', { method: 'POST', body: JSON.stringify({ name, plan, wallMaterial, scheme }) }),
   updateProject: (id, body) => req('/api/projects/' + id, { method: 'PUT', body: JSON.stringify(body) }),
   updateFloors: (id, floors) => req('/api/projects/' + id + '/floors', { method: 'PUT', body: JSON.stringify({ floors }) }),
   deleteProject: (id) => req('/api/projects/' + id, { method: 'DELETE' }),

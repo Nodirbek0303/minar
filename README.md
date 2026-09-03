@@ -6,10 +6,12 @@ Chizma yuklash → AI/geometrik tahlil → **MINAR qolip spetsifikatsiyasi va sm
 
 | Modul | Tavsif |
 |---|---|
-| 📐 **Chizma yuklash** | DXF (AutoCAD ASCII) yoki rasm (JPG/PNG — qo'lda chizilgan ham bo'ladi) |
+| 📥 **Ko'p faylli yuklash** | Bir vaqtda 20 tagacha hujjat: DXF, PDF, JPG/PNG/WEBP, DOCX, XLSX, TXT/CSV — sudrab tashlash bilan |
+| 📖 **Hujjatlarni birga o'qish** | Chizmadan geometriya, PDF/DOCX/XLSX matnidan qavatlar, balandliklar va gabarit; hammasi bitta tahlilda birlashtiriladi |
 | 📏 **Masshtab** | Birlik DXF sarlavhasidagi `$INSUNITS` dan olinadi; bo'lmasa gabarit bo'yicha taxmin qilinadi va foydalanuvchi mm/sm/m ni qo'lda tanlashi mumkin |
 | 🤖 **AI tahlil** | Rasm chizmadan AI devor/eshik/deraza/xonalarni aniqlaydi (OpenAI-mos API); DXF uchun geometrik tahlil |
 | 🏢 **Ko'p qavat** | Qavat qo'shish/o'chirish, balandlik; har qavat qolipi alohida yoqiladi/o'chiriladi va alohida hisoblanadi |
+| ⬇ **Apalka sxemasi** | Standart: qolip **faqat podval va 1-qavatga** qo'yiladi (yuqori qavatlarga kerak emas); bir bosishda o'zgartiriladi |
 | 🔩 **MINAR qoliplari** | Real katalog: KSHO/MSHO panellari aniq o'lchamlarda devorga joylanadi (DP kombinatsiya), zamok/tyaga/klin/gayka, ustun qolipi, TU teleskopik ustunlar — 3D da real ko'rinishda (RAL ranglar) |
 | 💰 **Sotib olish / arenda** | Har pozitsiya uchun narx; arenda oylik tarif × oylar bo'yicha hisoblanadi; har qatorda narxni qo'lda kiritish mumkin |
 | 🏗 **5D ko'rish** | Ko'p qavatli 3D model vaqt jadvali bo'yicha qurilib boradi; qavat tanlash; PNG snapshot |
@@ -32,6 +34,25 @@ npm test           # hisob dvigateli, DXF tahlili va validatsiya testlari
 npm run build      # production build
 npm start          # http://localhost:3001 da ham API, ham UI
 ```
+
+## Qo'llanadigan fayl formatlari
+
+| Format | Nima olinadi |
+|---|---|
+| `.dxf` | Devor geometriyasi, xonalar, ochiqliklar, ustunlar (aniq o'lchamda) |
+| `.pdf` | Sahifalar rasmga o'giriladi (AI ko'rish uchun) + matn (`pdftotext`) |
+| `.jpg .png .webp` | Chizma rasmi — AI vision o'qiydi |
+| `.docx` | Word matni: qavatlar, balandliklar, texnik talablar |
+| `.xlsx` | Excel jadvali: spetsifikatsiya, o'lchamlar |
+| `.txt .csv` | Oddiy matn |
+
+Bir so'rovda **20 tagacha** fayl, har biri 30 MB gacha. Geometriya manbai sifatida DXF ustun
+turadi; DXF bo'lmasa AI rasm tahlilidan foydalaniladi. Qavatlar avval AI dan, u bo'lmasa
+hujjat matnidan (`docparse.js` evristikasi) aniqlanadi — ya'ni **AI kalitisiz ham**
+Word/PDF matnidan "3 qavatli, podval 2,8 m" kabi ma'lumot o'qiladi.
+
+PDF ni o'qish uchun serverda `poppler-utils` kerak: `sudo apt install poppler-utils`.
+Rasm va PDF **chizmalarini** tushunish uchun `AI_API_KEY` kerak (matn va DXF kalitsiz ham ishlaydi).
 
 ## Kirish nazorati
 

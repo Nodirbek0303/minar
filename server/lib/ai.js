@@ -13,11 +13,12 @@ export function aiConfig() {
 }
 export const aiEnabled = () => !!aiConfig().key;
 
-async function chat(messages, { json = false, imageBase64 = null } = {}) {
+async function chat(messages, { json = false, imageBase64 = null, images = null } = {}) {
   const { key, baseUrl, model } = aiConfig();
-  const content = imageBase64
+  const imgs = images?.length ? images : (imageBase64 ? [imageBase64] : []);
+  const content = imgs.length
     ? [{ type: 'text', text: messages[messages.length - 1].content },
-       { type: 'image_url', image_url: { url: imageBase64 } }]
+       ...imgs.map((url) => ({ type: 'image_url', image_url: { url, detail: 'high' } }))]
     : messages[messages.length - 1].content;
   const body = {
     model,
@@ -98,6 +99,107 @@ wallId = walls massividagi indeks "w"+i. Faqat JSON, boshqa matn yo'q.`;
   return {
     plan: { meta: { name: 'AI tahlil (rasm)', source: 'image-ai', units: 'm', level: '1-qavat' }, walls, openings, rooms },
     demo: false
+  };
+}
+
+// ============================================================
+//  Ko'p hujjatli tahlil: chizma rasmlari (PDF sahifalari ham), va
+//  hujjat matnlari (PDF/DOCX/XLSX) — hammasi BIR SO'ROVDA yuboriladi.
+//  AI ularni birga o'qib, bitta reja modelini va qavatlar ro'yxatini qaytaradi.
+// ============================================================
+export async function analyzeDocuments({ images = [], text = '', fileNames = [], dxfHint = null }) {
+  if (!aiEnabled()) {
+    throw new Error(
+      "Hujjatlarni (PDF, rasm, DOCX) AI orqali o'qish uchun AI kaliti kerak: server .env fayliga " +
+      "AI_API_KEY yozing va serverni qayta ishga tushiring. Kalitsiz ham DXF chizmalar to'liq tahlil qilinadi."
+    );
+  }
+  if (!images.length && !text.trim()) {
+    throw new Error("Tahlil qilish uchun o'qiladigan hujjat topilmadi");
+  }
+
+  const parts = [];
+  parts.push(`Siz tajribali arxitektor va qurilish smetachisisiz. Sizga bitta loyihaning bir necha hujjati berilgan:
+${fileNames.map((n, i) => `  ${i + 1}. ${n}`).join('\n')}
+
+Rasmlardagi qavat rejalarini (planlarni) va matndagi texnik ma'lumotlarni BIRGA o'qing.
+Agar hujjatlar bir-birini to'ldirsa — hammasini hisobga oling. Qarama-qarshi bo'lsa, chizmadagi
+o'lchamni ustun deb biling, matndan esa qavatlar soni va balandliklarni oling.`);
+
+  if (dxfHint) {
+    parts.push(`\nDXF chizmasidan aniq geometriya allaqachon olingan: ${dxfHint.walls} devor, gabarit ${dxfHint.size?.x}x${dxfHint.size?.y} m.
+Shuning uchun devor koordinatalarini QAYTA chizmang — faqat qavatlar ro'yxati, loyiha nomi va izohni qaytaring.`);
+  }
+
+  if (text.trim()) {
+    parts.push(`\nHUJJATLARDAN OLINGAN MATN:\n"""\n${text.slice(0, 24000)}\n"""`);
+  }
+
+  parts.push(`\nFAQAT quyidagi JSON ni qaytaring, boshqa matnsiz:
+{
+  "name": "loyiha nomi",
+  "floors": [{"name":"Podval","height":2.8,"underground":true},{"name":"1-qavat","height":3.0,"underground":false}],
+  "walls": [{"a":[x1,y1],"b":[x2,y2],"thickness":0.3,"type":"exterior"}],
+  "openings": [{"wallId":"w0","type":"door","offset":1.0,"width":0.9,"height":2.1,"sill":0}],
+  "rooms": [{"name":"Yotoqxona","polygon":[[x,y],[x,y],[x,y]]}],
+  "summary": "hujjatlardan nima aniqlanganini 2-3 gapda o'zbekcha izohlang",
+  "confidence": "yuqori|o'rta|past"
+}
+
+Qoidalar:
+- Koordinatalar METRLARDA, plan markazi (0,0) atrofida.
+- wallId — walls massividagi tartib raqami: "w0", "w1", ...
+- Devor qalinligi: tashqi 0.3 m, ichki 0.15 m (chizmada boshqacha bo'lsa — o'shani oling).
+- floors: hujjatda podval (yerto'la) tilga olinsa, uni birinchi qilib "underground": true bilan qo'shing.
+- Qavat balandligi topilmasa 3.0 m deb oling.
+- Faqat JSON. Izoh, markdown yoki tushuntirish yozmang.`);
+
+  const out = await chat([{ role: 'user', content: parts.join('\n') }], { images, json: true });
+  let obj;
+  try {
+    obj = JSON.parse(out.replace(/```json|```/g, '').trim());
+  } catch {
+    throw new Error("AI javobini o'qib bo'lmadi (JSON emas). Hujjatlarni aniqroq nusxada qayta yuklang.");
+  }
+  return normalizeAiPlan(obj);
+}
+
+// AI qaytargan xom JSON ni plan modeliga keltirish
+function normalizeAiPlan(obj) {
+  const walls = (Array.isArray(obj.walls) ? obj.walls : []).map((w, i) => ({
+    id: 'w' + i,
+    a: w.a, b: w.b,
+    thickness: Number(w.thickness) || 0.2,
+    height: 3.0,
+    type: w.type === 'exterior' ? 'exterior' : 'interior'
+  })).filter((w) => Array.isArray(w.a) && Array.isArray(w.b));
+
+  const wallById = new Map(walls.map((w) => [w.id, w]));
+  const openings = (Array.isArray(obj.openings) ? obj.openings : []).map((o, i) => ({
+    id: 'o' + i,
+    wallId: wallById.has(o.wallId) ? o.wallId : null,
+    type: o.type === 'window' ? 'window' : 'door',
+    offset: Number(o.offset) || 0.5,
+    width: Number(o.width) || 0.9,
+    height: Number(o.height) || (o.type === 'window' ? 1.4 : 2.1),
+    sill: o.type === 'window' ? (Number(o.sill) ?? 0.9) : 0
+  })).filter((o) => o.wallId);
+
+  const rooms = (Array.isArray(obj.rooms) ? obj.rooms : [])
+    .filter((r) => Array.isArray(r.polygon) && r.polygon.length >= 3)
+    .map((r, i) => ({ id: 'r' + i, name: String(r.name || 'Xona ' + (i + 1)).slice(0, 60), polygon: r.polygon }));
+
+  const floors = (Array.isArray(obj.floors) ? obj.floors : []).map((f, i) => ({
+    name: String(f.name || (i + 1) + '-qavat').slice(0, 40),
+    height: Math.min(6, Math.max(0.5, Number(f.height) || 3)),
+    underground: !!f.underground
+  }));
+
+  return {
+    name: String(obj.name || '').slice(0, 60),
+    walls, openings, rooms, floors,
+    summary: String(obj.summary || '').slice(0, 800),
+    confidence: ["yuqori", "o'rta", 'past'].includes(obj.confidence) ? obj.confidence : "o'rta"
   };
 }
 

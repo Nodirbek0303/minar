@@ -74,6 +74,19 @@ export default function FloorsPanel({ project, onSaved, onUnauthorized }) {
 
   const saveEdits = () => save(draft);
 
+  // Apalka sxemasi: qolip faqat yer osti qavatlariga va birinchi yer usti qavatiga
+  const applyScheme = () => {
+    const firstAbove = draft.findIndex((f) => !f.underground);
+    const next = draft.map((f, i) => ({ ...f, facade: !!f.underground || i === firstAbove }));
+    setDraft(next);
+    save(next);
+  };
+  const allFloors = () => {
+    const next = draft.map((f) => ({ ...f, facade: true }));
+    setDraft(next);
+    save(next);
+  };
+
   const facadeOnCount = draft.filter((f) => f.facade).length;
   const totalFacade = (project.quantities?.perFloor || []).reduce((s, f) => s + f.facadeArea, 0);
 
@@ -85,6 +98,12 @@ export default function FloorsPanel({ project, onSaved, onUnauthorized }) {
         <span style={{ flex: 1 }} />
         <button className="btn small" onClick={addPodval} disabled={busy}>⬇ Podval qo'shish</button>
         <button className="btn small" onClick={addFloor} disabled={busy}>➕ Qavat qo'shish</button>
+        <button className="btn small secondary" onClick={applyScheme} disabled={busy} title="Qolipni faqat podval va birinchi qavatga qoldirish">
+          ⬇ Faqat podval + 1-qavat
+        </button>
+        <button className="btn small secondary" onClick={allFloors} disabled={busy} title="Barcha qavatlarga qolip">
+          🏢 Barchasiga
+        </button>
         <button className="btn small secondary" onClick={saveEdits} disabled={busy}>💾 Nom/balandlikni saqlash</button>
       </div>
       {err && <div className="error-box">{err}</div>}

@@ -7,8 +7,15 @@ import { fileURLToPath } from 'url';
 import { db, UPLOAD_DIR, loadEnv } from './lib/db.js';
 import { analyzeDxf, UNIT_FACTORS } from './lib/dxf.js';
 import { samplePlan } from './lib/samplePlan.js';
-import { computeQuantities, computeBOQ, computeSchedule, computeFloorSummary, DEFAULT_RATES } from './lib/calc.js';
-import { analyzeImage, chatAssistant, aiEnabled } from './lib/ai.js';
+import {
+  computeQuantities, computeBOQ, computeSchedule, computeFloorSummary, DEFAULT_RATES,
+  buildFloors, applyFormworkScheme, FORMWORK_SCHEMES
+} from './lib/calc.js';
+import { analyzeImage, analyzeDocuments, chatAssistant, aiEnabled } from './lib/ai.js';
+import {
+  SUPPORTED_EXT, fileKind, textOf, imageDataUri, pdfToImages, cleanupDir, popplerAvailable
+} from './lib/extract.js';
+import { parseFloorsFromText, parseSize, describeParsed } from './lib/docparse.js';
 import {
   validatePlan, validateFloors, validateRates, validatePriceOverrides, validateOpts, ValidationError
 } from './lib/validate.js';
@@ -30,17 +37,18 @@ app.use(cors(ORIGIN
   : { origin: (o, cb) => cb(null, true), credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 
-const ALLOWED_EXT = new Set(['.dxf', '.png', '.jpg', '.jpeg', '.webp']);
+const ALLOWED_EXT = SUPPORTED_EXT;
 const upload = multer({
   storage: multer.diskStorage({
     destination: UPLOAD_DIR,
     filename: (req, file, cb) => cb(null, Date.now() + '-' + path.basename(file.originalname).replace(/[^\w.\-]/g, '_'))
   }),
-  limits: { fileSize: 30 * 1024 * 1024, files: 1 },
+  limits: { fileSize: 30 * 1024 * 1024, files: 20 },
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) {
-      return cb(new ValidationError('Faqat DXF yoki rasm (PNG/JPG/WEBP) yuklash mumkin'));
+      return cb(new ValidationError(
+        'Qo‘llanmaydigan format: ' + ext + '. Mumkin: DXF, PDF, JPG, PNG, WEBP, DOCX, XLSX, TXT, CSV'));
     }
     cb(null, true);
   }
@@ -71,14 +79,21 @@ app.get('/api/auth-status', (req, res) => {
 app.use(requireAuth(['/api/login', '/api/logout', '/api/auth-status']));
 app.use('/files', express.static(UPLOAD_DIR, { dotfiles: 'deny', index: false }));
 
-// ---------- Upload ----------
-app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Fayl yuklanmadi' });
-  const id = 'f' + Date.now().toString(36);
-  const ext = path.extname(req.file.originalname).toLowerCase();
-  const type = ext === '.dxf' ? 'dxf' : 'image';
-  db.saveFile(id, { id, name: req.file.originalname, path: req.file.filename, type, size: req.file.size });
-  res.json({ fileId: id, name: req.file.originalname, type });
+// ---------- Upload (bir yoki bir necha fayl) ----------
+const saveUploaded = (f, i) => {
+  const id = 'f' + Date.now().toString(36) + i.toString(36);
+  const type = fileKind(f.originalname);
+  const meta = { id, name: f.originalname, path: f.filename, type, size: f.size };
+  db.saveFile(id, meta);
+  return { fileId: id, name: f.originalname, type, size: f.size };
+};
+
+app.post('/api/upload', upload.any(), (req, res) => {
+  const files = req.files || [];
+  if (!files.length) return res.status(400).json({ error: 'Fayl yuklanmadi' });
+  const saved = files.map(saveUploaded);
+  // Eski mijozlar uchun bitta fayl maydonlari ham qaytariladi
+  res.json({ files: saved, fileId: saved[0].fileId, name: saved[0].name, type: saved[0].type });
 });
 
 // ---------- Analyze ----------
@@ -108,6 +123,145 @@ app.post('/api/analyze', async (req, res, next) => {
     }
     next(e);
   }
+});
+
+// ---------- Ko'p hujjatli tahlil ----------
+// Barcha yuklangan fayllar BIRGA o'qiladi: DXF dan aniq geometriya,
+// rasm va PDF sahifalaridan AI vision, DOCX/XLSX/TXT dan matn konteksti.
+app.post('/api/analyze-batch', async (req, res, next) => {
+  const { fileIds, units, scheme = 'podval-1' } = req.body || {};
+  if (!Array.isArray(fileIds) || !fileIds.length) {
+    return res.status(400).json({ error: 'Fayl tanlanmadi' });
+  }
+  if (fileIds.length > 20) return res.status(400).json({ error: 'Bir vaqtda 20 tagacha fayl' });
+  if (units && !UNIT_FACTORS[units]) return res.status(400).json({ error: 'Birlik noto‘g‘ri' });
+
+  const files = fileIds.map((id) => db.getFile(id)).filter(Boolean);
+  if (!files.length) return res.status(404).json({ error: 'Fayllar topilmadi' });
+
+  const report = [];       // har fayl bo'yicha holat
+  const images = [];       // AI vision uchun data URI lar
+  const imageNames = [];
+  const texts = [];        // hujjat matnlari
+  const tmpDirs = [];
+  let dxfPlan = null, dxfFileName = null;
+
+  try {
+    for (const f of files) {
+      const full = path.join(UPLOAD_DIR, path.basename(f.path));
+      const kind = f.type && f.type !== 'other' ? f.type : fileKind(f.name);
+      try {
+        if (kind === 'dxf') {
+          const raw = analyzeDxf(await fs.promises.readFile(full, 'utf8'), { units });
+          // eng ko'p devorli DXF ni asosiy geometriya deb olamiz
+          if (!dxfPlan || raw.walls.length > dxfPlan.walls.length) { dxfPlan = raw; dxfFileName = f.name; }
+          report.push({ name: f.name, kind, ok: true, info: `${raw.walls.length} devor, ${raw.rooms.length} xona` });
+        } else if (kind === 'image') {
+          images.push(await imageDataUri(full));
+          imageNames.push(f.name);
+          report.push({ name: f.name, kind, ok: true, info: 'AI ko‘rish uchun qo‘shildi' });
+        } else if (kind === 'pdf') {
+          const t = await textOf(full, 'pdf');
+          if (t) texts.push(`--- ${f.name} ---\n${t}`);
+          const { dir, files: pages } = await pdfToImages(full, 6);
+          tmpDirs.push(dir);
+          for (const [i, pg] of pages.entries()) {
+            images.push(await imageDataUri(pg));
+            imageNames.push(`${f.name} (${i + 1}-sahifa)`);
+          }
+          report.push({ name: f.name, kind, ok: true, info: `${pages.length} sahifa rasmga o‘girildi${t ? ', matn o‘qildi' : ''}` });
+        } else if (['docx', 'xlsx', 'text'].includes(kind)) {
+          const t = await textOf(full, kind);
+          if (t) texts.push(`--- ${f.name} ---\n${t}`);
+          report.push({ name: f.name, kind, ok: !!t, info: t ? `${t.length} belgi matn o‘qildi` : 'matn topilmadi' });
+        } else {
+          report.push({ name: f.name, kind, ok: false, info: 'qo‘llanmaydigan format' });
+        }
+      } catch (e) {
+        report.push({ name: f.name, kind, ok: false, info: e.message });
+      }
+    }
+
+    const text = texts.join('\n\n');
+    let ai = null, aiError = null;
+
+    // AI: rasm va/yoki matn bo'lsa chaqiriladi
+    if (images.length || text.trim()) {
+      if (aiEnabled()) {
+        try {
+          ai = await analyzeDocuments({
+            images: images.slice(0, 10),
+            text,
+            fileNames: [...imageNames, ...files.filter((f) => ['docx', 'xlsx', 'text', 'pdf'].includes(f.type)).map((f) => f.name)],
+            dxfHint: dxfPlan ? { walls: dxfPlan.walls.length, size: dxfPlan.meta.analysis?.size } : null
+          });
+        } catch (e) {
+          aiError = e.message;
+        }
+      } else {
+        aiError = 'AI kaliti yo‘q — rasm va PDF chizmalar o‘qilmadi (DXF va matn ishlaydi)';
+      }
+    }
+
+    // --- Geometriyani birlashtirish: DXF ustun, bo'lmasa AI ---
+    let plan;
+    if (dxfPlan) {
+      plan = validatePlan(dxfPlan);
+      plan.meta.analysis = dxfPlan.meta.analysis;
+      plan.meta.source = 'dxf';
+    } else if (ai && ai.walls.length) {
+      plan = validatePlan({
+        meta: { name: ai.name || 'AI tahlil', source: 'ai-docs', level: '1-qavat' },
+        walls: ai.walls, openings: ai.openings, rooms: ai.rooms
+      });
+    } else {
+      return res.status(422).json({
+        error: aiError || 'Hujjatlardan chizma aniqlanmadi. DXF fayl yuklang yoki chizma rasmini aniqroq suratga oling.',
+        report, code: 'NO_GEOMETRY'
+      });
+    }
+
+    // --- Qavatlar ---
+    // 1) AI aniqlagan qavatlar; 2) AI bo'lmasa — hujjat matnidan evristik;
+    // 3) ikkalasi ham bo'lmasa — standart (Podval + 1-qavat).
+    const parsedFloors = parseFloorsFromText(text);
+    const parsedSize = parseSize(text);
+    const detected = ai?.floors?.length ? ai.floors : parsedFloors;
+    const floorSource = ai?.floors?.length ? 'ai' : (parsedFloors.length ? 'matn' : 'standart');
+
+    plan.floors = buildFloors(detected, {
+      scheme: FORMWORK_SCHEMES[scheme] ? scheme : 'podval-1'
+    });
+    if (ai?.name) plan.meta.name = ai.name;
+
+    res.json({
+      plan,
+      report,
+      summary: ai?.summary || describeParsed(parsedFloors, parsedSize),
+      confidence: ai?.confidence || (dxfPlan ? 'yuqori' : null),
+      aiError,
+      aiUsed: !!ai,
+      floorSource,
+      docSize: parsedSize,
+      source: dxfPlan ? `DXF: ${dxfFileName}` : 'AI hujjat tahlili',
+      scheme
+    });
+  } catch (e) {
+    next(e);
+  } finally {
+    for (const d of tmpDirs) await cleanupDir(d);
+  }
+});
+
+app.get('/api/capabilities', async (req, res) => {
+  res.json({
+    ai: aiEnabled(),
+    pdf: await popplerAvailable(),
+    formats: [...SUPPORTED_EXT],
+    schemes: FORMWORK_SCHEMES,
+    maxFiles: 20,
+    maxFileMb: 30
+  });
 });
 
 // ---------- Projects ----------
@@ -144,8 +298,12 @@ function recalcProject(p) {
 
 app.post('/api/projects', (req, res, next) => {
   try {
-    const { name, plan, wallMaterial = 'brick' } = req.body || {};
+    const { name, plan, wallMaterial = 'brick', scheme } = req.body || {};
     const validPlan = plan ? validatePlan(plan) : validatePlan(samplePlan());
+    // Apalka sxemasi ko'rsatilgan bo'lsa (masalan faqat podval va 1-qavat)
+    if (scheme && FORMWORK_SCHEMES[scheme] && validPlan.floors?.length) {
+      validPlan.floors = applyFormworkScheme(validPlan.floors, scheme);
+    }
     const p = {
       id: db.newId(),
       name: String(name || validPlan.meta?.name || 'Yangi loyiha').slice(0, 80),

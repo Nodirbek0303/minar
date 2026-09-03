@@ -118,6 +118,46 @@ export function normalizeFloors(plan) {
   return [{ id: 'fl0', name: plan.meta?.level || '1-qavat', height: clampH(h), facade: true, underground: false, formwork: { type: 'msho', color: 'RAL3020' } }];
 }
 
+// ------------------------------------------------------------
+//  Qavatlar ro'yxatini qurish va APALKA SXEMASINI qo'llash.
+//
+//  Standart sxema — 'podval-1': qolip faqat YER OSTI qavatlariga va
+//  birinchi yer usti qavatiga qo'yiladi, qolganlariga qo'yilmaydi.
+//  Bu MINAR amaliyotidagi eng ko'p uchraydigan holat: podval va
+//  1-qavat monolit quyiladi, yuqorisi boshqa texnologiyada ketadi.
+// ------------------------------------------------------------
+export const FORMWORK_SCHEMES = {
+  'podval-1': 'Faqat podval va 1-qavat',
+  all: 'Barcha qavatlar'
+};
+
+export function applyFormworkScheme(floors, scheme = 'podval-1') {
+  const list = Array.isArray(floors) ? floors : [];
+  if (scheme === 'all') return list.map((f) => ({ ...f, facade: true }));
+  // birinchi yer usti qavati indeksi
+  const firstAbove = list.findIndex((f) => !f.underground);
+  return list.map((f, i) => ({ ...f, facade: !!f.underground || i === firstAbove }));
+}
+
+// AI/hujjatlardan olingan qavatlarni to'liq qavat obyektiga aylantirish
+export function buildFloors(detected, { scheme = 'podval-1', type = 'msho', color = 'RAL3020' } = {}) {
+  let list = Array.isArray(detected) && detected.length ? detected : [
+    { name: 'Podval', height: 2.8, underground: true },
+    { name: '1-qavat', height: 3.0, underground: false }
+  ];
+  list = list.slice(0, 40).map((f, i) => ({
+    id: 'fl' + i,
+    name: String(f.name || (i + 1) + '-qavat').slice(0, 40),
+    height: Math.min(6, Math.max(0.5, Number(f.height) || 3)),
+    underground: !!f.underground,
+    facade: true,
+    formwork: { type, color }
+  }));
+  // yer osti qavatlari doim boshida tursin
+  list.sort((a, b) => (b.underground ? 1 : 0) - (a.underground ? 1 : 0) === 0 ? 0 : (a.underground ? -1 : 1));
+  return applyFormworkScheme(list, scheme);
+}
+
 // Klassik vent-fasad maydoni: faqat TASHQI yuza, ochiqliklar chegirilgan
 function classicFacadeArea(plan, extWalls, H) {
   let area = 0;
