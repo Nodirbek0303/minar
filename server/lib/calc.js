@@ -140,19 +140,27 @@ export function applyFormworkScheme(floors, scheme = 'podval-1') {
 }
 
 // AI/hujjatlardan olingan qavatlarni to'liq qavat obyektiga aylantirish
-export function buildFloors(detected, { scheme = 'podval-1', type = 'msho', color = 'RAL3020' } = {}) {
+export function buildFloors(detected, { scheme = 'podval-1', type = 'msho', color = 'RAL3020', ensurePodval = true } = {}) {
   let list = Array.isArray(detected) && detected.length ? detected : [
     { name: 'Podval', height: 2.8, underground: true },
     { name: '1-qavat', height: 3.0, underground: false }
   ];
-  list = list.slice(0, 40).map((f, i) => ({
+  // 'podval-1' sxemasida podval qoidaning bir qismi. Hujjatlarda yer osti
+  // qavati topilmagan bo'lsa ham u qo'shiladi (tahlil hisobotida ko'rsatiladi
+  // va kerak bo'lmasa "Qavatlar" bo'limida o'chiriladi).
+  if (ensurePodval && scheme === 'podval-1' && !list.some((f) => f.underground)) {
+    list = [{ name: 'Podval', height: 2.8, underground: true, addedByRule: true }, ...list];
+  }
+  const built = list.slice(0, 40).map((f, i) => ({
     id: 'fl' + i,
     name: String(f.name || (i + 1) + '-qavat').slice(0, 40),
     height: Math.min(6, Math.max(0.5, Number(f.height) || 3)),
     underground: !!f.underground,
     facade: true,
-    formwork: { type, color }
+    formwork: { type, color },
+    ...(f.addedByRule ? { addedByRule: true } : {})
   }));
+  list = built;
   // yer osti qavatlari doim boshida tursin
   list.sort((a, b) => (b.underground ? 1 : 0) - (a.underground ? 1 : 0) === 0 ? 0 : (a.underground ? -1 : 1));
   return applyFormworkScheme(list, scheme);

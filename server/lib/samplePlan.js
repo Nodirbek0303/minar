@@ -1,9 +1,12 @@
-// Demo uchun namuna plan: 10x8 m 2-qavatli uy, 4 xona, eshik va derazalar bilan.
+// Demo uchun namuna plan: 10x8 m uy — podval + 2 qavat, 4 xona,
+// eshik va derazalar bilan. Qolip qoidasi bo'yicha apalka podval va
+// 1-qavatga hisoblanadi, 2-qavatga qo'yilmaydi.
 export function samplePlan() {
   const H = 3.0;
   const floors = [
+    { id: 'pod', name: 'Podval', height: 2.8, underground: true, facade: true },
     { id: 'f1', name: '1-qavat', height: H, facade: true },
-    { id: 'f2', name: '2-qavat', height: H, facade: true }
+    { id: 'f2', name: '2-qavat', height: H, facade: false }
   ];
   const walls = [
     { id: 'w1', a: [0, 0], b: [10, 0], thickness: 0.3, height: H, type: 'exterior' },

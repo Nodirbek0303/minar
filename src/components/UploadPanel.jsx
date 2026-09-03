@@ -259,6 +259,11 @@ function AnalysisReport({ result, onCreate, busy }) {
                   <span>
                     {f.underground ? '⬇' : '🏢'} {f.name}
                     <span className="small-muted"> · {f.height} m</span>
+                    {f.addedByRule && (
+                      <span className="small-muted" style={{ color: 'var(--accent)' }}>
+                        {' '}· qoida bo‘yicha qo‘shildi (hujjatda topilmadi)
+                      </span>
+                    )}
                   </span>
                   <b style={{ color: f.facade ? 'var(--ok)' : 'var(--muted)' }}>
                     {f.facade ? '● apalka qo‘yiladi' : '○ apalka yo‘q'}

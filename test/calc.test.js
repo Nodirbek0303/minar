@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeQuantities, computeBOQ, computeSchedule, computeFloorSummary, normalizeFloors,
-  applyFormworkScheme, DEFAULT_RATES
+  applyFormworkScheme, buildFloors, DEFAULT_RATES
 } from '../server/lib/calc.js';
 import { samplePlan } from '../server/lib/samplePlan.js';
 
@@ -19,8 +19,8 @@ const calc = (plan, opts = {}) => {
 
 test('namuna loyiha: qavatlar, balandlik va panellar hisoblanadi', () => {
   const { q, boq } = calc(samplePlan());
-  assert.equal(q.floorCount, 2);
-  assert.equal(q.totalHeight, 6);
+  assert.equal(q.floorCount, 3, 'podval + 2 qavat');
+  assert.equal(q.totalHeight, 6, 'yer usti balandligi (podval kirmaydi)');
   assert.ok(q.facadeArea > 0);
   assert.ok(q.panelCount > 0);
   assert.ok(boq.rows.length > 0);
@@ -52,12 +52,15 @@ test('UI maydoni va 5D jadval maydoni bir xil manbadan', () => {
 
 test('qavat kesimi: qatorlar soni va panel soni qaytariladi', () => {
   const { summary, boq } = calc(samplePlan());
-  assert.equal(summary.length, 2);
+  assert.equal(summary.length, 3, 'podval + 2 qavat');
+  // Qolip qo'yiladigan qavatlarda miqdor bo'ladi, qolganida nol
   for (const s of summary) {
-    assert.ok(s.rows > 0, 'rows maydoni bo\'lishi kerak (UI shuni ko\'rsatadi)');
-    assert.ok(s.panelCount > 0);
+    const expect = s.facade;
+    assert.equal(s.rows > 0, expect, s.name + ': qatorlar');
+    assert.equal(s.panelCount > 0, expect, s.name + ': panellar');
     assert.equal(s.total, boq.rows.filter((r) => r.floorId === s.id).reduce((x, r) => x + r.total, 0));
   }
+  assert.deepEqual(summary.filter((s) => s.facade).map((s) => s.name), ['Podval', '1-qavat']);
 });
 
 test('apalkasi o\'chirilgan qavat hisobga kirmaydi', () => {
@@ -214,4 +217,30 @@ test('QOIDA: ko\'p qavatli binoda smeta faqat ikki qavatdan iborat', () => {
   assert.deepEqual(withRows, ['Podval', '1-qavat'], 'smetada faqat shu ikki qavat bo\'lishi kerak');
   assert.equal(boq.rows.filter((r) => ['f2', 'f3', 'f4'].includes(r.floorId)).length, 0);
   assert.equal(q.perFloor.filter((f) => f.panelCount > 0).length, 2);
+});
+
+test('namuna loyihada PODVAL bor va apalka podval + 1-qavatda', () => {
+  const plan = samplePlan();
+  const pod = plan.floors.find((f) => f.underground);
+  assert.ok(pod, 'namuna loyihada podval bo\'lishi kerak');
+  assert.equal(pod.name, 'Podval');
+  const { summary, q } = calc(plan);
+  const withRows = summary.filter((s) => s.rows > 0).map((s) => s.name);
+  assert.deepEqual(withRows, ['Podval', '1-qavat']);
+  assert.equal(q.perFloor[0].elevation, -2.8, 'podval yer ostida');
+});
+
+test('hujjatda podval topilmasa qoida bo\'yicha qo\'shiladi va belgilanadi', () => {
+  const f = buildFloors([{ name: '1-qavat', height: 3 }, { name: '2-qavat', height: 3 }]);
+  assert.equal(f[0].name, 'Podval');
+  assert.equal(f[0].underground, true);
+  assert.equal(f[0].addedByRule, true, 'qo\'shilgani belgilanishi kerak');
+  assert.equal(f[0].facade, true);
+  assert.equal(f[1].facade, true, '1-qavat');
+  assert.equal(f[2].facade, false, '2-qavat');
+  // hujjatda podval bo'lsa — qo'shilmaydi va belgilanmaydi
+  const g = buildFloors([{ name: 'Podval', height: 2.5, underground: true }, { name: '1-qavat', height: 3 }]);
+  assert.equal(g.filter((x) => x.underground).length, 1);
+  assert.equal(g[0].addedByRule, undefined);
+  assert.equal(g[0].height, 2.5, 'hujjatdagi balandlik saqlanadi');
 });
