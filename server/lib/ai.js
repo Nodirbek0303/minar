@@ -1,17 +1,31 @@
+import * as claude from './anthropic.js';
+import { DEFAULT_MODEL as ANTHROPIC_DEFAULT_MODEL } from './anthropic.js';
 // ============================================================
 //  AI moduli — OpenAI-mos API (OpenAI / Z.ai / Anthropic-proxy)
 //  .env: AI_API_KEY, AI_BASE_URL (default https://api.openai.com/v1), AI_MODEL (default gpt-4o-mini)
 //  Kalit bo'lmasa — demo rejim (evristik tahlil + namuna plan).
 // ============================================================
 
+// Provayder kalitning ko'rinishidan aniqlanadi (yoki AI_PROVIDER bilan majburlanadi):
+//  · sk-ant-... → Anthropic (Claude), rasmiy SDK orqali
+//  · boshqasi   → OpenAI-mos API (/chat/completions)
 export function aiConfig() {
+  const key = process.env.AI_API_KEY || '';
+  const forced = (process.env.AI_PROVIDER || '').toLowerCase();
+  const provider = forced === 'anthropic' || forced === 'openai'
+    ? forced
+    : (key.startsWith('sk-ant-') ? 'anthropic' : 'openai');
   return {
-    key: process.env.AI_API_KEY || '',
+    key,
+    provider,
     baseUrl: (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
-    model: process.env.AI_MODEL || 'gpt-4o-mini'
+    model: process.env.AI_MODEL || (provider === 'anthropic' ? ANTHROPIC_DEFAULT_MODEL : 'gpt-4o-mini')
   };
 }
 export const aiEnabled = () => !!aiConfig().key;
+export const aiProvider = () => aiConfig().provider;
+// Anthropic PDF ni rasmga o'girmasdan, hujjat sifatida to'g'ridan-to'g'ri o'qiydi
+export const supportsNativePdf = () => aiEnabled() && aiConfig().provider === 'anthropic';
 
 async function chat(messages, { json = false, imageBase64 = null, images = null } = {}) {
   const { key, baseUrl, model } = aiConfig();
@@ -107,15 +121,23 @@ wallId = walls massividagi indeks "w"+i. Faqat JSON, boshqa matn yo'q.`;
 //  hujjat matnlari (PDF/DOCX/XLSX) — hammasi BIR SO'ROVDA yuboriladi.
 //  AI ularni birga o'qib, bitta reja modelini va qavatlar ro'yxatini qaytaradi.
 // ============================================================
-export async function analyzeDocuments({ images = [], text = '', fileNames = [], dxfHint = null }) {
+export async function analyzeDocuments({ images = [], documents = [], text = '', fileNames = [], dxfHint = null }) {
   if (!aiEnabled()) {
     throw new Error(
       "Hujjatlarni (PDF, rasm, DOCX) AI orqali o'qish uchun AI kaliti kerak: server .env fayliga " +
       "AI_API_KEY yozing va serverni qayta ishga tushiring. Kalitsiz ham DXF chizmalar to'liq tahlil qilinadi."
     );
   }
-  if (!images.length && !text.trim()) {
+  if (!images.length && !documents.length && !text.trim()) {
     throw new Error("Tahlil qilish uchun o'qiladigan hujjat topilmadi");
+  }
+
+  const cfg = aiConfig();
+  if (cfg.provider === 'anthropic') {
+    const { result } = await claude.analyzeDocuments(cfg.key, cfg.model, {
+      images, documents, text, fileNames, dxfHint
+    });
+    return normalizeAiPlan(result);
   }
 
   const parts = [];
@@ -217,6 +239,14 @@ Qoliplar sotib olinishi ham, oylik arendaga olinishi ham mumkin — foydalanuvch
   for (const h of history.slice(-8)) msgs.push({ role: h.role, content: h.content });
   msgs.push({ role: 'user', content: message });
   if (!aiEnabled()) return demoAnswer(message, context);
+
+  const cfg = aiConfig();
+  if (cfg.provider === 'anthropic') {
+    // Anthropic da system alohida maydon, messages ichida emas
+    const sys = msgs.filter((m) => m.role === 'system').map((m) => m.content).join('\n\n');
+    const turns = msgs.filter((m) => m.role !== 'system');
+    return claude.chat(cfg.key, cfg.model, { system: sys, messages: turns });
+  }
   return chat(msgs);
 }
 

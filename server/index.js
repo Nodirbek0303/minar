@@ -11,7 +11,7 @@ import {
   computeQuantities, computeBOQ, computeSchedule, computeFloorSummary, DEFAULT_RATES,
   buildFloors, applyFormworkScheme, FORMWORK_SCHEMES
 } from './lib/calc.js';
-import { analyzeImage, analyzeDocuments, chatAssistant, aiEnabled } from './lib/ai.js';
+import { analyzeImage, analyzeDocuments, chatAssistant, aiEnabled, aiProvider, supportsNativePdf } from './lib/ai.js';
 import {
   SUPPORTED_EXT, fileKind, textOf, imageDataUri, pdfToImages, cleanupDir, popplerAvailable
 } from './lib/extract.js';
@@ -142,6 +142,7 @@ app.post('/api/analyze-batch', async (req, res, next) => {
   const report = [];       // har fayl bo'yicha holat
   const images = [];       // AI vision uchun data URI lar
   const imageNames = [];
+  const documents = [];    // Claude ga to'g'ridan-to'g'ri beriladigan PDF lar
   const texts = [];        // hujjat matnlari
   const tmpDirs = [];
   let dxfPlan = null, dxfFileName = null;
@@ -163,13 +164,23 @@ app.post('/api/analyze-batch', async (req, res, next) => {
         } else if (kind === 'pdf') {
           const t = await textOf(full, 'pdf');
           if (t) texts.push(`--- ${f.name} ---\n${t}`);
-          const { dir, files: pages } = await pdfToImages(full, 6);
-          tmpDirs.push(dir);
-          for (const [i, pg] of pages.entries()) {
-            images.push(await imageDataUri(pg));
-            imageNames.push(`${f.name} (${i + 1}-sahifa)`);
+          if (supportsNativePdf()) {
+            // Claude PDF ni o'zi sahifama-sahifa o'qiydi — rasmga o'girish shart emas
+            documents.push({
+              name: f.name,
+              mediaType: 'application/pdf',
+              data: (await fs.promises.readFile(full)).toString('base64')
+            });
+            report.push({ name: f.name, kind, ok: true, info: `hujjat sifatida AI ga berildi${t ? ', matn ham o‘qildi' : ''}` });
+          } else {
+            const { dir, files: pages } = await pdfToImages(full, 6);
+            tmpDirs.push(dir);
+            for (const [i, pg] of pages.entries()) {
+              images.push(await imageDataUri(pg));
+              imageNames.push(`${f.name} (${i + 1}-sahifa)`);
+            }
+            report.push({ name: f.name, kind, ok: true, info: `${pages.length} sahifa rasmga o‘girildi${t ? ', matn o‘qildi' : ''}` });
           }
-          report.push({ name: f.name, kind, ok: true, info: `${pages.length} sahifa rasmga o‘girildi${t ? ', matn o‘qildi' : ''}` });
         } else if (['docx', 'xlsx', 'text'].includes(kind)) {
           const t = await textOf(full, kind);
           if (t) texts.push(`--- ${f.name} ---\n${t}`);
@@ -186,11 +197,12 @@ app.post('/api/analyze-batch', async (req, res, next) => {
     let ai = null, aiError = null;
 
     // AI: rasm va/yoki matn bo'lsa chaqiriladi
-    if (images.length || text.trim()) {
+    if (images.length || documents.length || text.trim()) {
       if (aiEnabled()) {
         try {
           ai = await analyzeDocuments({
             images: images.slice(0, 10),
+            documents: documents.slice(0, 5),
             text,
             fileNames: [...imageNames, ...files.filter((f) => ['docx', 'xlsx', 'text', 'pdf'].includes(f.type)).map((f) => f.name)],
             dxfHint: dxfPlan ? { walls: dxfPlan.walls.length, size: dxfPlan.meta.analysis?.size } : null
@@ -256,6 +268,8 @@ app.post('/api/analyze-batch', async (req, res, next) => {
 app.get('/api/capabilities', async (req, res) => {
   res.json({
     ai: aiEnabled(),
+    provider: aiEnabled() ? aiProvider() : null,
+    nativePdf: supportsNativePdf(),
     pdf: await popplerAvailable(),
     formats: [...SUPPORTED_EXT],
     schemes: FORMWORK_SCHEMES,

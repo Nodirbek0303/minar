@@ -54,6 +54,15 @@ Word/PDF matnidan "3 qavatli, podval 2,8 m" kabi ma'lumot o'qiladi.
 PDF ni o'qish uchun serverda `poppler-utils` kerak: `sudo apt install poppler-utils`.
 Rasm va PDF **chizmalarini** tushunish uchun `AI_API_KEY` kerak (matn va DXF kalitsiz ham ishlaydi).
 
+### AI provayderi
+
+Provayder kalit ko'rinishidan avtomatik aniqlanadi (yoki `AI_PROVIDER` bilan majburlanadi):
+
+| Kalit | Provayder | Xususiyatlari |
+|---|---|---|
+| `sk-ant-...` | **Anthropic (Claude)** — rasmiy SDK | PDF **rasmga o'girilmaydi**, hujjat sifatida to'g'ridan-to'g'ri o'qiladi; natija `strict` tool sxemasi bilan kafolatlanadi (JSON hech qachon buzuq kelmaydi); standart model `claude-opus-5`, adaptiv fikrlash bilan |
+| boshqasi | OpenAI-mos API | `/chat/completions`, PDF sahifalari rasmga o'giriladi |
+
 ## Kirish nazorati
 
 | `.env` da `APP_PASSWORD` | Natija |
