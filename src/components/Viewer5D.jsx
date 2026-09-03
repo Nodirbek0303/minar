@@ -96,6 +96,10 @@ export default function Viewer5D({ project }) {
   const [selFloor, setSelFloor] = useState(null); // null = barchasi
   const [glError, setGlError] = useState(null); // {message, diagnostics}
   const [canPng, setCanPng] = useState(true);
+  // Standart: 3D da FAQAT qolip qo'yiladigan qavatlar ko'rinadi (podval + 1-qavat).
+  // Qolgan qavatlar sotuvga kirmaydi, shuning uchun ko'rinishni chalg'itmaydi.
+  const [formworkOnly, setFormworkOnly] = useState(true);
+  const formworkOnlyRef = useRef(true);
   const selFloorRef = useRef(null);
   const totalDays = project.schedule?.totalDays || 1;
   const phases = project.schedule?.phases || [];
@@ -103,6 +107,11 @@ export default function Viewer5D({ project }) {
     : (project.quantities?.perFloor || [{ id: 'fl0', name: '1-qavat', height: 3, facade: true }]);
 
   useEffect(() => { selFloorRef.current = selFloor; }, [selFloor]);
+  useEffect(() => {
+    formworkOnlyRef.current = formworkOnly;
+    const st = stateRef.current;
+    if (st?.applyDay && st.state) st.applyDay(st.state.day);
+  }, [formworkOnly]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -464,9 +473,16 @@ export default function Viewer5D({ project }) {
 
     // Jadvalda faqat ikki bosqich bo'ladi: MINAR qolip montaji ('walls') va
     // klassik vent-fasad ('facade'). Har qavat ketma-ket quriladi.
+    // Qaysi qavatlarga qolip qo'yiladi (podval + 1-qavat qoidasi)
+    const hasFw = flDef.map((f) => f.facade !== false);
+
     const applyDay = (d) => {
       const sel = selFloorRef.current;
-      const floorOpacity = (i) => (sel == null || sel === i ? 1 : 0.1);
+      const floorOpacity = (i) => {
+        // qolipsiz qavat — "faqat qolip qavatlari" rejimida umuman ko'rinmaydi
+        if (formworkOnlyRef.current && i >= 0 && hasFw[i] === false) return 0;
+        return sel == null || sel === i ? 1 : 0.1;
+      };
       const staggerFloor = (p, i) => Math.min(1, Math.max(0, p * (N + 1) - i));
       const wallsP = progressOf('walls', d);
       const facadeP = progressOf('facade', d);
@@ -501,7 +517,9 @@ export default function Viewer5D({ project }) {
       }
       // qavat ajratgichlari va yorliqlari — doim ko'rinadi, qavat tanloviga bo'ysunadi
       for (const m of sepMeshes) {
-        const op = floorOpacity(m.userData.floor);
+        const fi2 = m.userData.floor;
+        // yer sathi chizig'i (fi2 < 0) va qolip qavatlari ko'rinadi
+        const op = fi2 < 0 ? (sel == null ? 1 : 0.1) : floorOpacity(fi2);
         m.material.opacity = (m.userData.baseOp ?? 1) * op;
         m.visible = op > 0.05;
       }
@@ -614,13 +632,20 @@ export default function Viewer5D({ project }) {
             onClick={() => setSelFloor(null)}
           >🏢 Barchasi</button>
           {floors.map((f, i) => (
-            <button
-              key={f.id || i}
-              className={'btn small ' + (selFloor === i ? '' : 'secondary')}
-              onClick={() => setSelFloor(i)}
-              title={f.facade === false ? 'Apalkasiz qavat' : 'Apalka bilan'}
-            >{f.name}{f.facade === false ? ' ○' : ' ●'}</button>
+            (formworkOnly && f.facade === false) ? null : (
+              <button
+                key={f.id || i}
+                className={'btn small ' + (selFloor === i ? '' : 'secondary')}
+                onClick={() => setSelFloor(i)}
+                title={f.facade === false ? 'Apalkasiz qavat' : 'Apalka bilan'}
+              >{f.name}{f.facade === false ? ' ○' : ' ●'}</button>
+            )
           ))}
+          {formworkOnly && floors.some((f) => f.facade === false) && (
+            <span className="small-muted" style={{ fontSize: 12 }}>
+              · {floors.filter((f) => f.facade === false).length} qavat yashirilgan (qolip qo'yilmaydi)
+            </span>
+          )}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button className="btn small" disabled={!!glError} onClick={() => setPlaying((p) => !p)}>{playing ? '⏸ To‘xtatish' : '▶ Qurilishni boshlash'}</button>
@@ -639,7 +664,15 @@ export default function Viewer5D({ project }) {
               a.click();
             }}
           >📸 PNG yuklab olish</button>
-          <span className="small-muted">yoki slayder bilan kunni tanlang:</span>
+          <span style={{ flex: 1 }} />
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}
+            title="Qolip qo'yilmaydigan qavatlarni ko'rsatish/yashirish">
+            <input
+              type="checkbox" checked={formworkOnly} disabled={!!glError}
+              onChange={() => setFormworkOnly((v) => !v)}
+            />
+            <span className="small-muted">Faqat qolip qavatlari</span>
+          </label>
         </div>
         <input
           type="range" min={0} max={totalDays} value={shownDay} disabled={!!glError} style={{ margin: '10px 0' }}
@@ -659,7 +692,8 @@ export default function Viewer5D({ project }) {
           <span><span className="dot" style={{ background: '#4a4a4e' }} />Tyaga (tayrot)</span>
         </div>
         <p className="small-muted" style={{ marginTop: 8 }}>
-          💡 Qavat tugmalarida <b>●</b> — apalka bor, <b>○</b> — apalka o'chirilgan ("Qavatlar" bo'limida boshqariladi).
+          💡 Standart qoida: qolip <b>faqat podval va 1-qavatga</b> qo'yiladi — qavat soni qancha bo'lishidan qat'i nazar.
+          Yuqori qavatlar 3D dan yashiriladi; butun binoni ko'rish uchun "Faqat qolip qavatlari" belgisini oling.
           Qavatni tanlasangiz, boshqa qavatlar shaffof bo'lib, shu qavatning apalka joylashuvi yaqqol ko'rinadi.
           🥽 <b>VR rejimi:</b> HTTPS orqali ochib VR qo'lqoynini ulang.
         </p>

@@ -314,9 +314,12 @@ app.post('/api/projects', (req, res, next) => {
   try {
     const { name, plan, wallMaterial = 'brick', scheme } = req.body || {};
     const validPlan = plan ? validatePlan(plan) : validatePlan(samplePlan());
-    // Apalka sxemasi ko'rsatilgan bo'lsa (masalan faqat podval va 1-qavat)
-    if (scheme && FORMWORK_SCHEMES[scheme] && validPlan.floors?.length) {
-      validPlan.floors = applyFormworkScheme(validPlan.floors, scheme);
+    // Apalka sxemasi HAR DOIM qo'llanadi. Standart — 'podval-1': qavat soni
+    // qancha bo'lishidan qat'i nazar qolip faqat yer osti qavatlariga va
+    // birinchi yer usti qavatiga qo'yiladi.
+    const useScheme = scheme && FORMWORK_SCHEMES[scheme] ? scheme : 'podval-1';
+    if (validPlan.floors?.length) {
+      validPlan.floors = applyFormworkScheme(validPlan.floors, useScheme);
     }
     const p = {
       id: db.newId(),

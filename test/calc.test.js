@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  computeQuantities, computeBOQ, computeSchedule, computeFloorSummary, normalizeFloors, DEFAULT_RATES
+  computeQuantities, computeBOQ, computeSchedule, computeFloorSummary, normalizeFloors,
+  applyFormworkScheme, DEFAULT_RATES
 } from '../server/lib/calc.js';
 import { samplePlan } from '../server/lib/samplePlan.js';
 
@@ -171,4 +172,46 @@ test('podval yer ostida joylashadi va balandlikka qo\'shiladi', () => {
   assert.equal(q.perFloor[0].elevation, -2.8, 'podval sathi manfiy bo\'lishi kerak');
   assert.equal(q.perFloor[1].elevation, 0, '1-qavat yer sathidan boshlanadi');
   assert.equal(q.totalHeight, 3, 'yer ustidagi balandlik');
+});
+
+test('QOIDA: qavat soni qancha bo\'lsa ham qolip faqat podval va 1-qavatga', () => {
+  const mk = (n, withPodval) => {
+    const floors = [];
+    if (withPodval) floors.push({ id: 'pod', name: 'Podval', height: 2.8, underground: true });
+    for (let i = 1; i <= n; i++) floors.push({ id: 'f' + i, name: i + '-qavat', height: 3, underground: false });
+    return applyFormworkScheme(floors.map((f) => ({ ...f, facade: true, formwork: { type: 'msho' } })), 'podval-1');
+  };
+  // 1 dan 20 gacha qavat — natija doim bir xil qoidaga bo'ysunadi
+  for (const n of [1, 2, 3, 5, 9, 20]) {
+    for (const withPodval of [true, false]) {
+      const floors = mk(n, withPodval);
+      const on = floors.filter((f) => f.facade);
+      const off = floors.filter((f) => !f.facade);
+      assert.equal(on.length, withPodval ? 2 : 1, `${n} qavat, podval=${withPodval}: qolipli qavatlar soni`);
+      if (withPodval) {
+        assert.equal(on[0].name, 'Podval');
+        assert.equal(on[1].name, '1-qavat');
+      } else {
+        assert.equal(on[0].name, '1-qavat');
+      }
+      // 2-qavatdan yuqorisi hech qachon kirmaydi
+      assert.ok(off.every((f) => /^([2-9]|1\d|20)-qavat$/.test(f.name)), 'faqat yuqori qavatlar o\'chirilishi kerak');
+    }
+  }
+});
+
+test('QOIDA: ko\'p qavatli binoda smeta faqat ikki qavatdan iborat', () => {
+  const plan = samplePlan();
+  plan.floors = applyFormworkScheme([
+    { id: 'pod', name: 'Podval', height: 2.8, underground: true, facade: true, formwork: { type: 'msho' } },
+    { id: 'f1', name: '1-qavat', height: 3, facade: true, formwork: { type: 'msho' } },
+    { id: 'f2', name: '2-qavat', height: 3, facade: true, formwork: { type: 'msho' } },
+    { id: 'f3', name: '3-qavat', height: 3, facade: true, formwork: { type: 'msho' } },
+    { id: 'f4', name: '4-qavat', height: 3, facade: true, formwork: { type: 'msho' } }
+  ], 'podval-1');
+  const { q, boq, summary } = calc(plan);
+  const withRows = summary.filter((s) => s.rows > 0).map((s) => s.name);
+  assert.deepEqual(withRows, ['Podval', '1-qavat'], 'smetada faqat shu ikki qavat bo\'lishi kerak');
+  assert.equal(boq.rows.filter((r) => ['f2', 'f3', 'f4'].includes(r.floorId)).length, 0);
+  assert.equal(q.perFloor.filter((f) => f.panelCount > 0).length, 2);
 });

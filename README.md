@@ -11,7 +11,7 @@ Chizma yuklash → AI/geometrik tahlil → **MINAR qolip spetsifikatsiyasi va sm
 | 📏 **Masshtab** | Birlik DXF sarlavhasidagi `$INSUNITS` dan olinadi; bo'lmasa gabarit bo'yicha taxmin qilinadi va foydalanuvchi mm/sm/m ni qo'lda tanlashi mumkin |
 | 🤖 **AI tahlil** | Rasm chizmadan AI devor/eshik/deraza/xonalarni aniqlaydi (OpenAI-mos API); DXF uchun geometrik tahlil |
 | 🏢 **Ko'p qavat** | Qavat qo'shish/o'chirish, balandlik; har qavat qolipi alohida yoqiladi/o'chiriladi va alohida hisoblanadi |
-| ⬇ **Apalka sxemasi** | Standart: qolip **faqat podval va 1-qavatga** qo'yiladi (yuqori qavatlarga kerak emas); bir bosishda o'zgartiriladi |
+| ⬇ **Apalka qoidasi** | Qavat soni qancha bo'lishidan **qat'i nazar** qolip faqat **podval va 1-qavatga** hisoblanadi. Yuqori qavatlar smetaga ham, 5D ko'rinishga ham kirmaydi |
 | 🔩 **MINAR qoliplari** | Real katalog: KSHO/MSHO panellari aniq o'lchamlarda devorga joylanadi (DP kombinatsiya), zamok/tyaga/klin/gayka, ustun qolipi, TU teleskopik ustunlar — 3D da real ko'rinishda (RAL ranglar) |
 | 💰 **Sotib olish / arenda** | Har pozitsiya uchun narx; arenda oylik tarif × oylar bo'yicha hisoblanadi; har qatorda narxni qo'lda kiritish mumkin |
 | 🏗 **5D ko'rish** | Ko'p qavatli 3D model vaqt jadvali bo'yicha qurilib boradi; qavat tanlash; PNG snapshot |
@@ -134,6 +134,11 @@ Miqdor me'yorlari `shared/formwork.js` dagi **`FORMWORK_NORMS`** da, izohi bilan
 - Push-pull tirgak (Подкос винтовой): 2.4 m qadam, 2 yuza; uzunligi qavat balandligiga qarab katalogdan
 - Burchak profillari: har tashqi burchakda, qavat balandligini qoplaydigan sonda
 - Ustun qolipi (ЩУР): devor bog'lanish nuqtalarida, balandligi qavatga mos
+- **Qavat qoidasi (`podval-1`)**: qolip yer osti qavatlariga va birinchi yer usti qavatiga
+  qo'yiladi — qolganlariga qo'yilmaydi. Bu yangi loyiha yaratilganda avtomatik qo'llanadi,
+  UI da yangi qavat qo'shilsa unga apalka yoqilmaydi, 5D ko'rinishda esa qolipsiz qavatlar
+  yashiriladi ("Faqat qolip qavatlari" belgisi bilan boshqariladi).
+  Qoidadan chetlashilsa "Qavatlar" bo'limida ogohlantirish va bir bosishli tuzatish chiqadi
 - **TU teleskopik ustun**: pol maydonining har 1.5 m² ga 1 dona + uch oyoq + univilka.
   ⚠ Bu guruh Excel katalogida **yo'q** (u faqat devor va ustun qolipini qamraydi) —
   qiymatlar MINAR UZB.pdf dan olingan

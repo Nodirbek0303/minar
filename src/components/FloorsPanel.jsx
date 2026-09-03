@@ -38,11 +38,15 @@ export default function FloorsPanel({ project, onSaved, onUnauthorized }) {
 
   const addFloor = () => {
     const last = draft[draft.length - 1];
+    // Qoida: qolip faqat podval va birinchi yer usti qavatiga. Shuning uchun
+    // yangi qo'shilgan yuqori qavatga apalka avtomatik YOQILMAYDI —
+    // kerak bo'lsa foydalanuvchi belgini o'zi qo'yadi.
+    const hasAboveGround = draft.some((f) => !f.underground);
     const next = [...draft, {
       id: null,
-      name: (draft.length + 1) + '-qavat',
+      name: (draft.filter((f) => !f.underground).length + 1) + '-qavat',
       height: last?.height || 3,
-      facade: last ? last.facade : true,
+      facade: !hasAboveGround,
       formwork: last?.formwork ? { ...last.formwork } : { type: 'msho', color: 'RAL3020' }
     }];
     setDraft(next);
@@ -88,6 +92,10 @@ export default function FloorsPanel({ project, onSaved, onUnauthorized }) {
   };
 
   const facadeOnCount = draft.filter((f) => f.facade).length;
+  // Standart qoidaga mos keladimi: qolip faqat yer osti + birinchi yer usti qavatida
+  const firstAboveIdx = draft.findIndex((f) => !f.underground);
+  const onCount = facadeOnCount;
+  const deviates = draft.some((f, i) => (f.facade !== false) !== (!!f.underground || i === firstAboveIdx));
   const totalFacade = (project.quantities?.perFloor || []).reduce((s, f) => s + f.facadeArea, 0);
 
   return (
@@ -108,6 +116,15 @@ export default function FloorsPanel({ project, onSaved, onUnauthorized }) {
       </div>
       {err && <div className="error-box">{err}</div>}
       {busy && <p className="small-muted">⏳ Hisoblanmoqda...</p>}
+      {deviates && (
+        <div className="card" style={{ borderColor: 'var(--accent)', marginBottom: 12 }}>
+          ⚠ <b>Qoidadan chetlashish:</b> hozir qolip {onCount} qavatga hisoblanyapti.
+          Standart qoida — <b>faqat podval va 1-qavat</b>.
+          <button className="btn small" style={{ marginLeft: 10 }} onClick={applyScheme} disabled={busy}>
+            Qoidani qo'llash
+          </button>
+        </div>
+      )}
 
       <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))' }}>
         {draft.map((f, i) => {
