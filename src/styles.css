@@ -107,3 +107,9 @@ select, input[type=text], input[type=number] {
 @media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+/* O'chirilgan boshqaruv elementlari (masalan, 3D chizilmaganda) */
+button:disabled, input:disabled, select:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

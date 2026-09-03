@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { createRenderer, watchContextLoss } from '../lib/webgl.js';
+import WebGLFallback from './WebGLFallback.jsx';
 
 // Fasad (apalka) tizimining 3D maketi: devor -> anker bolt -> gayka/shayba -> tirgak (bracket)
 // -> vertikal profil -> klemmer -> panel. "Exploded" slайдer bilan qismlar ajraladi.
@@ -11,7 +13,7 @@ export default function FacadeDetail() {
   const rotatingRef = useRef(false);
   const [explode, setExplode] = useState(0);
   const [rotating, setRotating] = useState(false);
-  const [glError, setGlError] = useState('');
+  const [glError, setGlError] = useState(null); // {message, diagnostics}
 
   useEffect(() => { explodeRef.current = explode; }, [explode]);
   useEffect(() => { rotatingRef.current = rotating; }, [rotating]);
@@ -27,11 +29,15 @@ export default function FacadeDetail() {
 
     let renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer = createRenderer().renderer;
+      setGlError(null);
     } catch (e) {
-      setGlError(e.message || 'WebGL kontekstini yaratib bo‘lmadi');
+      setGlError({ message: e.message, diagnostics: e.diagnostics });
       return;
     }
+    const unwatchGl = watchContextLoss(renderer, () => {
+      setGlError({ message: 'Videokarta konteksti yo‘qoldi (drayver qayta ishga tushgan bo‘lishi mumkin)', diagnostics: null });
+    });
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     mount.appendChild(renderer.domElement);
@@ -179,10 +185,19 @@ export default function FacadeDetail() {
 
     return () => {
       ro.disconnect();
+      unwatchGl();
       cancelAnimationFrame(raf);
       controls.dispose();
       pmrem.dispose();
+      // geometriya va materiallarni bo'shatish (xotira sizishiga qarshi)
+      scene.traverse((obj) => {
+        obj.geometry?.dispose?.();
+        const m = obj.material;
+        if (m) (Array.isArray(m) ? m : [m]).forEach((x) => x.dispose?.());
+      });
+      scene.clear();
       renderer.dispose();
+      renderer.forceContextLoss?.();
       mount.innerHTML = '';
     };
   }, []);
@@ -199,16 +214,8 @@ export default function FacadeDetail() {
 
   return (
     <div>
-      <div className="viewer-wrap" style={{ height: 480 }}>
-        {glError ? (
-          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', height: '100%' }}>
-            <b>🖥 3D maketni chizib bo'lmadi</b>
-            <span className="small-muted">
-              Brauzerda WebGL ishlamayapti: {glError}<br />
-              Brauzer sozlamalarida apparat tezlashtirishni (hardware acceleration) yoqing yoki boshqa brauzerda oching.
-            </span>
-          </div>
-        ) : null}
+      <div className="viewer-wrap" style={glError ? { height: 'auto' } : { height: 480 }}>
+        {glError ? <WebGLFallback title="Fasad detali 3D maketini chizib bo'lmadi" error={glError} /> : null}
         <div ref={mountRef} style={{ width: '100%', height: '100%', display: glError ? 'none' : 'block' }} />
       </div>
       <div className="timeline-panel">

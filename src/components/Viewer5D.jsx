@@ -6,6 +6,8 @@ import {
   MINAR, layoutWallFaceWithOpenings, openingsOfWall, exteriorWallsOf,
   columnJunctions, COLUMN_SIZE, FORMWORK_NORMS
 } from '../../shared/formwork.js';
+import { createRenderer, watchContextLoss } from '../lib/webgl.js';
+import WebGLFallback from './WebGLFallback.jsx';
 
 // MINAR panel teksturasi: qizil (yoki tanlangan RAL) ramka + qora laminat fanera
 // + konus vtulkalar + MINAR yozuvi. O'lcham va rang bo'yicha keshlanadi.
@@ -92,7 +94,8 @@ export default function Viewer5D({ project }) {
   const [day, setDay] = useState(null);
   const [playing, setPlaying] = useState(false);
   const [selFloor, setSelFloor] = useState(null); // null = barchasi
-  const [glError, setGlError] = useState('');
+  const [glError, setGlError] = useState(null); // {message, diagnostics}
+  const [canPng, setCanPng] = useState(true);
   const selFloorRef = useRef(null);
   const totalDays = project.schedule?.totalDays || 1;
   const phases = project.schedule?.phases || [];
@@ -115,13 +118,17 @@ export default function Viewer5D({ project }) {
     scene.fog = new THREE.Fog(0x0a0f18, 80, 220);
 
     const camera = new THREE.PerspectiveCamera(50, mount.clientWidth / mount.clientHeight, 0.1, 600);
-    // WebGL bo'lmasa (eski qurilma, apparat tezlashtirish o'chirilgan, masofaviy ish stoli)
-    // butun sahifa qulamasligi kerak — faqat shu bo'lim o'rniga xabar chiqadi
+    // WebGL kontekstini bir necha sozlama bilan sinab ko'ramiz (eski videokarta,
+    // apparat tezlashtirish o'chirilgan, masofaviy ish stoli). Hech biri
+    // ishlamasa — butun sahifa emas, faqat shu bo'lim o'rniga tushuntirish chiqadi.
     let renderer;
     try {
-      renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+      const r = createRenderer();
+      renderer = r.renderer;
+      setCanPng(r.canPng);
+      setGlError(null);
     } catch (e) {
-      setGlError(e.message || 'WebGL kontekstini yaratib bo‘lmadi');
+      setGlError({ message: e.message, diagnostics: e.diagnostics });
       return;
     }
     renderer.setSize(mount.clientWidth, mount.clientHeight);
@@ -129,6 +136,10 @@ export default function Viewer5D({ project }) {
     renderer.xr.enabled = true;
     mount.appendChild(renderer.domElement);
     mount.appendChild(VRButton.createButton(renderer));
+
+    const unwatchGl = watchContextLoss(renderer, () => {
+      setGlError({ message: 'Videokarta konteksti yo‘qoldi (drayver qayta ishga tushgan bo‘lishi mumkin)', diagnostics: null });
+    });
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
@@ -535,7 +546,7 @@ export default function Viewer5D({ project }) {
     // --- animatsiya tsikli ---
     const clock = new THREE.Clock();
     const state = { day: totalDays, playing: false };
-    stateRef.current = { state, setDay, applyDay };
+    stateRef.current = { state, setDay, applyDay, renderOnce: () => renderer.render(scene, camera) };
     const tick = () => {
       const dt = clock.getDelta();
       if (state.playing) {
@@ -559,6 +570,7 @@ export default function Viewer5D({ project }) {
 
     return () => {
       ro.disconnect();
+      unwatchGl();
       renderer.setAnimationLoop(null);
       controls.dispose();
       // Sahnadagi barcha geometriya/materiallarni bo'shatish
@@ -609,19 +621,10 @@ export default function Viewer5D({ project }) {
 
   return (
     <div>
-      <div className="viewer-wrap" style={{ height: 540 }}>
-        {glError ? (
-          <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center', height: '100%' }}>
-            <b>🖥 3D ko'rinishni chizib bo'lmadi</b>
-            <span className="small-muted">
-              Brauzerda WebGL ishlamayapti: {glError}<br />
-              Brauzer sozlamalarida apparat tezlashtirishni (hardware acceleration) yoqing yoki boshqa brauzerda oching.
-              Hisob-kitob va spetsifikatsiya "Materiallar va narx" bo'limida to'liq ishlaydi.
-            </span>
-          </div>
-        ) : null}
+      <div className="viewer-wrap" style={glError ? { height: 'auto' } : { height: 540 }}>
+        {glError ? <WebGLFallback title="3D ko'rinishni chizib bo'lmadi" error={glError} /> : null}
         <div ref={mountRef} style={{ width: '100%', height: '100%', display: glError ? 'none' : 'block' }} />
-        <div className="viewer-hud">
+        <div className="viewer-hud" style={glError ? { display: 'none' } : undefined}>
           <div className="hud-card">
             <div className="v">{shownDay} / {totalDays} kun</div>
             <div className="l">{activePhase ? activePhase.name : 'Qurilish yakunlandi'}</div>
@@ -656,13 +659,16 @@ export default function Viewer5D({ project }) {
           ))}
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <button className="btn small" onClick={() => setPlaying((p) => !p)}>{playing ? '⏸ To‘xtatish' : '▶ Qurilishni boshlash'}</button>
+          <button className="btn small" disabled={!!glError} onClick={() => setPlaying((p) => !p)}>{playing ? '⏸ To‘xtatish' : '▶ Qurilishni boshlash'}</button>
           <button
             className="btn small secondary"
+            disabled={!!glError}
             title="3D ko'rinishni PNG rasm qilib saqlash"
             onClick={() => {
               const c = mountRef.current?.querySelector('canvas');
               if (!c) return;
+              // Kam quvvatli rejimda bufer saqlanmaydi — rasmni olishdan oldin qayta chizamiz
+              if (!canPng) stateRef.current?.renderOnce?.();
               const a = document.createElement('a');
               a.href = c.toDataURL('image/png');
               a.download = '5d-koirish-' + shownDay + '-kun.png';
@@ -672,7 +678,7 @@ export default function Viewer5D({ project }) {
           <span className="small-muted">yoki slayder bilan kunni tanlang:</span>
         </div>
         <input
-          type="range" min={0} max={totalDays} value={shownDay} style={{ margin: '10px 0' }}
+          type="range" min={0} max={totalDays} value={shownDay} disabled={!!glError} style={{ margin: '10px 0' }}
           onChange={(e) => setDay(Number(e.target.value))}
         />
         {phases.map((ph) => (
