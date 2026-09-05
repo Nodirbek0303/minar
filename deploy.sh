@@ -18,7 +18,14 @@ echo "→ Build"
 npm run build
 
 echo "→ Testlar"
-npm test
+# `set -e` faqat buyruq TO'G'RIDAN-TO'G'RI chaqirilganda ishlaydi. Agar
+# deploy.sh ning o'zi `| tail` bilan chaqirilsa, uning xato kodi quvur
+# oxiridagi buyruqniki bilan almashadi va TESTLAR YIQILGAN BO'LSA HAM
+# yuborish davom etadi. Shuning uchun natija aniq tekshiriladi.
+if ! npm test; then
+  echo "TO'XTATILDI: testlar yiqildi, server yangilanmadi." >&2
+  exit 1
+fi
 
 echo "→ Serverdagi bazani zaxiralash"
 ssh "$HOST" "cd $DIR && mkdir -p server/data/backups && \
