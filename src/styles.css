@@ -133,3 +133,17 @@ button:disabled, input:disabled, select:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
+
+/* Ogohlantirish: hisob taxminiy o'lchamga tayanganda ko'rinadi.
+   Katta summalar chiqadigan sahifada bu eslatmani berkitish - raqamni
+   o'lchangandek ko'rsatish demak. */
+.warn-box {
+  background: rgba(240, 165, 0, .10);
+  border: 1px solid rgba(240, 165, 0, .45);
+  border-radius: 10px;
+  padding: 10px 14px;
+  color: #f0c060;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+.warn-box b { color: #ffd98a; }

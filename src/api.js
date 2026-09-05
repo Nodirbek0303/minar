@@ -45,6 +45,15 @@ export const api = {
   analyzeBatch: (fileIds, { units, scheme } = {}) =>
     req('/api/analyze-batch', { method: 'POST', body: JSON.stringify({ fileIds, units, scheme }) }),
   capabilities: () => req('/api/capabilities'),
+  // Haqiqiy binolar kutubxonasi (OpenStreetMap, O'zbekiston)
+  library: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([, v]) => v !== '' && v !== undefined && v !== null)
+    ).toString();
+    return req('/api/library' + (q ? '?' + q : ''));
+  },
+  libraryPlan: (id, opts = {}) =>
+    req('/api/library/' + id + '/plan', { method: 'POST', body: JSON.stringify(opts) }),
   listProjects: () => req('/api/projects'),
   getProject: (id) => req('/api/projects/' + id),
   createProject: (name, plan, wallMaterial, scheme, etalon, sourceFiles) =>

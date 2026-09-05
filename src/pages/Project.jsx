@@ -10,6 +10,17 @@ import FloorsPanel from '../components/FloorsPanel.jsx';
 import BimCoordination from '../components/BimCoordination.jsx';
 import FormworkDrawings from '../components/FormworkDrawings.jsx';
 
+// Plan qayerdan kelgani - foydalanuvchi raqamlarning ishonchliligini
+// shundan biladi.
+const SOURCE_NAME = {
+  dxf: 'DXF',
+  ifc: 'IFC (BIM model)',
+  osm: 'OpenStreetMap konturi',
+  'image-ai': 'AI rasm tahlili',
+  'ai-docs': 'AI hujjat tahlili',
+  demo: 'Namuna'
+};
+
 const TABS = [
   { key: 'bim', name: '◈ BIM markazi' },
   { key: 'drawings', name: '📋 Ishchi chizmalar' },
@@ -40,7 +51,7 @@ export default function Project({ onUnauthorized }) {
     <div className="container">
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', marginBottom: 8 }}>
         <h1 style={{ margin: 0, fontSize: 22 }}>{p.name}</h1>
-        <span className="demo-tag">{p.plan?.meta?.source === 'dxf' ? 'DXF' : p.plan?.meta?.source === 'image-ai' ? 'AI rasm tahlili' : 'Namuna'}</span>
+        <span className="demo-tag">{SOURCE_NAME[p.plan?.meta?.source] || 'Namuna'}</span>
         <span style={{ flex: 1 }} />
         {p.opts?.rentMode === 'rent' && (
           <span className="badge">arenda · {p.opts?.rentMonths || 1} oy</span>
@@ -50,6 +61,15 @@ export default function Project({ onUnauthorized }) {
           <div className="small-muted">{q.facadeArea || 0} m² qolip · {p.schedule?.totalDays} kun montaj</div>
         </div>
       </div>
+
+      {/* Manba haqidagi ogohlantirish. Bu yerda katta summalar chiqadi;
+          agar ba'zi o'lchamlar TAXMIN bo'lsa, buni aytmaslik - raqamni
+          o'lchangandek ko'rsatish demak. */}
+      {p.plan?.meta?.note && (
+        <div className="warn-box" style={{ marginBottom: 12 }}>
+          ⚠ <b>Bu hisob taxminiy o'lchamlarga tayanadi.</b> {p.plan.meta.note}
+        </div>
+      )}
 
       <div className="stat-grid">
         <div className="stat"><div className="v">{q.floorCount ?? 1}</div><div className="l">qavat</div></div>

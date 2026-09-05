@@ -118,6 +118,10 @@ export function validatePlan(plan) {
       source: str(meta.source, 20, 'manual'),
       units: 'm',
       level: str(meta.level, 30, '1-qavat'),
+      // Manba haqidagi izoh saqlanishi SHART: unda qaysi o'lcham
+      // o'lchangan va qaysi biri taxmin ekani yoziladi. Uni tashlab
+      // yuborsak, foydalanuvchi taxminiy raqamni o'lchangandek ko'radi.
+      ...(meta.note ? { note: str(meta.note, 400, '') } : {}),
       ...(meta.analysis && typeof meta.analysis === 'object' ? { analysis: meta.analysis } : {})
     },
     walls, openings, rooms

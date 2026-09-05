@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, som } from '../api.js';
 import UploadPanel from '../components/UploadPanel.jsx';
+import BuildingLibrary from '../components/BuildingLibrary.jsx';
 
 
 export default function Dashboard({ onUnauthorized }) {
@@ -10,6 +11,7 @@ export default function Dashboard({ onUnauthorized }) {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const [aiOn, setAiOn] = useState(false);
+  const [showLibrary, setShowLibrary] = useState(false);
 
   const fail = (e) => {
     if (e.status === 401) return onUnauthorized?.();
@@ -52,12 +54,30 @@ export default function Dashboard({ onUnauthorized }) {
           <button className="btn secondary" onClick={createSample} disabled={!!busy}>
             ⚡ Namuna loyiha bilan sinab ko'rish
           </button>
+          <button className="btn secondary" onClick={() => setShowLibrary((v) => !v)} disabled={!!busy}>
+            🏙 {showLibrary ? 'Kutubxonani yopish' : 'Haqiqiy binodan boshlash'}
+          </button>
           <span className="badge">
             AI: {aiOn ? <span style={{ color: 'var(--ok)' }}>ulangan</span> : <span style={{ color: 'var(--accent)' }}>demo rejim</span>}
           </span>
           {busy && <span style={{ color: 'var(--accent)' }}>⏳ {busy}</span>}
           {error && <span className="error-box" style={{ margin: 0 }}>⚠ {error}</span>}
         </div>
+
+        {showLibrary && (
+          <BuildingLibrary
+            onError={fail}
+            onPick={async (plan, b) => {
+              setError('');
+              setBusy(`«${b.name || 'bino'}» dan loyiha yaratilmoqda...`);
+              try {
+                const name = b.name || `OSM bino ${b.id}`;
+                const p = await api.createProject(name, plan);
+                nav('/project/' + p.id);
+              } catch (e) { setBusy(''); fail(e); }
+            }}
+          />
+        )}
 
         <UploadPanel
           onCreated={(p) => nav('/project/' + p.id)}

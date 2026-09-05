@@ -69,3 +69,14 @@ test('yo\'q bino null qaytaradi', () => {
   assert.equal(library.get(-1), null);
   assert.equal(library.toPlan(null), null);
 });
+
+test('manba izohi saqlashda YO\'QOLMAYDI', async () => {
+  // Izohda qaysi o'lcham taxmin ekani yoziladi. Uni validatsiya
+  // tashlab yuborsa, foydalanuvchi 115 milliard so'mlik hisobni
+  // o'lchangan deb qabul qiladi.
+  const { validatePlan } = await import('../server/lib/validate.js');
+  const b = library.get(library.search({ limit: 1 })[0].id);
+  const saved = validatePlan(library.toPlan(b));
+  assert.match(saved.meta.note, /standart qiymat/);
+  assert.equal(saved.meta.source, 'osm');
+});
