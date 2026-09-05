@@ -1,4 +1,5 @@
 import express from 'express';
+import * as limiter from './lib/ratelimit.js';
 import cors from 'cors';
 import multer from 'multer';
 import fs from 'fs';
@@ -31,6 +32,10 @@ loadEnv();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.disable('x-powered-by');
+// nginx ortida turibmiz: haqiqiy mijoz IP si X-Forwarded-For da keladi.
+// Busiz har so'rov 127.0.0.1 dek ko'rinadi va IP bo'yicha cheklov ishlamaydi
+// (bitta hujumchi hammani qulflab qo'yardi).
+app.set('trust proxy', 'loopback');
 
 // CORS: parol yoqilgan bo'lsa faqat ko'rsatilgan manzil (cookie bilan),
 // aks holda lokal dev serveri (vite) uchun ochiq.
@@ -58,11 +63,35 @@ const upload = multer({
 });
 
 // ---------- Autentifikatsiya ----------
-app.post('/api/login', (req, res) => {
+app.post('/api/login', async (req, res) => {
   if (!authEnabled()) return res.json({ ok: true, auth: false });
+
+  // Parolni terib topishga qarshi: qulflangan IP umuman tekshirilmaydi.
+  const ip = req.ip || 'nomalum';
+  const gate = limiter.check(ip);
+  if (!gate.allowed) {
+    res.set('Retry-After', String(gate.retryAfterSec));
+    return res.status(429).json({
+      error: `Juda ko'p urinish. ${gate.retryAfterSec} soniyadan keyin qayta uring.`,
+      retryAfterSec: gate.retryAfterSec
+    });
+  }
+
   if (!checkPassword(req.body?.password)) {
+    const r = limiter.fail(ip);
+    // Sekinlashtirish: odam sezmaydi, robot esa tezligini yo'qotadi.
+    await limiter.delay();
+    if (r.lockedSec) {
+      res.set('Retry-After', String(r.lockedSec));
+      return res.status(429).json({
+        error: `Juda ko'p urinish. ${r.lockedSec} soniyadan keyin qayta uring.`,
+        retryAfterSec: r.lockedSec
+      });
+    }
     return res.status(401).json({ error: 'Parol noto‘g‘ri' });
   }
+
+  limiter.succeed(ip);
   const { token, maxAge } = createSession();
   setSessionCookie(res, token, maxAge);
   res.json({ ok: true, auth: true });
