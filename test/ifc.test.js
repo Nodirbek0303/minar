@@ -443,3 +443,96 @@ test('juda katta fayl aniq xato beradi, xizmatni yiqitmaydi', () => {
   const raw = 'ISO-10303-21;\nDATA;\n' + 'x'.repeat(2000);
   assert.throws(() => readIfc(raw, { maxBytes: 500 }), /juda katta/);
 });
+
+// --- Har qavatning O'Z devorlari ---------------------------------------
+// AdvancedProject.ifc da podvalda 90, 1-qavatda 183 devor bor. Bitta
+// to'plamni hamma qavatga qo'llash 64,8% xatoga olib kelardi.
+
+const TWO_STOREYS = `ISO-10303-21;
+DATA;
+#11=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#1=IFCCARTESIANPOINT((0.,0.));
+#2=IFCAXIS2PLACEMENT2D(#1,$);
+#4=IFCCARTESIANPOINT((0.,0.,0.));
+#5=IFCAXIS2PLACEMENT3D(#4,$,$);
+#6=IFCDIRECTION((0.,0.,1.));
+#14=IFCLOCALPLACEMENT($,#5);
+#20=IFCRECTANGLEPROFILEDEF(.AREA.,'W',#2,6.,0.3);
+#21=IFCEXTRUDEDAREASOLID(#20,#5,#6,3.);
+#22=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#21));
+#23=IFCPRODUCTDEFINITIONSHAPE($,$,(#22));
+#30=IFCWALL('p1',$,'Podval devori',$,$,#14,#23,$,$);
+#40=IFCWALL('g1',$,'1-qavat devori A',$,$,#14,#23,$,$);
+#41=IFCWALL('g2',$,'1-qavat devori B',$,$,#14,#23,$,$);
+#42=IFCWALL('g3',$,'1-qavat devori C',$,$,#14,#23,$,$);
+#50=IFCBUILDINGSTOREY('s0',$,'Podval',$,$,#14,$,$,.ELEMENT.,-3.);
+#51=IFCBUILDINGSTOREY('s1',$,'1-qavat',$,$,#14,$,$,.ELEMENT.,0.);
+#60=IFCRELCONTAINEDINSPATIALSTRUCTURE('r0',$,$,$,(#30),#50);
+#61=IFCRELCONTAINEDINSPATIALSTRUCTURE('r1',$,$,$,(#40,#41,#42),#51);
+ENDSEC;`;
+
+test('har qavat o\'z devorlarini oladi', () => {
+  const plan = ifcToPlan(readIfc(TWO_STOREYS));
+  const podval = plan.floors.find((f) => f.name === 'Podval');
+  const birinchi = plan.floors.find((f) => f.name === '1-qavat');
+  assert.equal(podval.walls.length, 1);
+  assert.equal(birinchi.walls.length, 3);
+});
+
+test('devori bor eng pastki qavat asos qilib olinadi', () => {
+  // Eng pastki qavat DEVORSIZ bo'lishi mumkin (masalan «Site» yoki
+  // bo'sh texnik qavat) - u holda plan bo'sh chiqib, model bekorga
+  // rad etilardi.
+  const raw = TWO_STOREYS.replace(
+    "#60=IFCRELCONTAINEDINSPATIALSTRUCTURE('r0',$,$,$,(#30),#50);", '');
+  const plan = ifcToPlan(readIfc(raw));
+  assert.equal(plan.meta.level, '1-qavat');
+  assert.equal(plan.walls.length, 3);
+});
+
+test('tashlangan element ikki marta sanalmaydi', () => {
+  // Devorlar bir necha marta ko'rib chiqiladi; hisobot yolg'on
+  // gapirmasligi kerak.
+  const raw = `ISO-10303-21;
+DATA;
+#1=IFCBUILDINGSTOREY('a',$,'Q1',$,$,$,$,$,.ELEMENT.,0.);
+#2=IFCWALL('b',$,'Olchamsiz',$,$,$,$,$,$);
+#3=IFCRELCONTAINEDINSPATIALSTRUCTURE('r',$,$,$,(#2),#1);
+ENDSEC;`;
+  assert.equal(ifcToPlan(readIfc(raw)).meta.analysis.skipped.noSize, 1);
+});
+
+test('devor uchlari IFC ning O\'Q CHIZIG\'idan olinadi', () => {
+  // Eng muhim tuzatish: Revit devorni boshlang'ich nuqtasiga
+  // joylashtiradi, profil esa siljigan bo'ladi. Uchlarni profildan
+  // chiqarsak devorlar bir-biriga ULANMAYDI va plan sochilib ketadi —
+  // uzunlik va yuza to'g'ri bo'lsa ham chizma bino bo'lmaydi.
+  const raw = `ISO-10303-21;
+DATA;
+#11=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#1=IFCCARTESIANPOINT((0.,0.));
+#2=IFCCARTESIANPOINT((8.,0.));
+#3=IFCPOLYLINE((#1,#2));
+#4=IFCSHAPEREPRESENTATION($,'Axis','Curve2D',(#3));
+#5=IFCCARTESIANPOINT((0.,0.,0.));
+#6=IFCAXIS2PLACEMENT3D(#5,$,$);
+#7=IFCLOCALPLACEMENT($,#6);
+#8=IFCAXIS2PLACEMENT2D(#1,$);
+#9=IFCRECTANGLEPROFILEDEF(.AREA.,'W',#8,8.,0.3);
+#10=IFCDIRECTION((0.,0.,1.));
+#12=IFCEXTRUDEDAREASOLID(#9,#6,#10,3.);
+#13=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#12));
+#14=IFCPRODUCTDEFINITIONSHAPE($,$,(#4,#13));
+#20=IFCWALL('g',$,'Devor',$,$,#7,#14,$,$);
+ENDSEC;`;
+  const w = readIfc(raw).elements[0];
+  assert.equal(w.ends.from, 'axis');
+  assert.deepEqual(w.ends.a, [0, 0]);
+  assert.deepEqual(w.ends.b, [8, 0]);
+});
+
+test('o\'q chizig\'i yo\'q bo\'lsa markazdan chiqariladi', () => {
+  const w = readIfc(WALL_WITH_OPENING).elements.find((e) => e.kind === 'wall');
+  assert.equal(w.ends.from, 'placement');
+  assert.ok(w.ends.a && w.ends.b);
+});

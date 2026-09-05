@@ -431,6 +431,17 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
   const N = FORMWORK_NORMS;
   const rentMonths = rent ? Math.max(1, Math.round(Number(months) || 1)) : 1;
   const extWalls = exteriorWallsOf(plan).filter((w) => w.type === 'exterior');
+
+  // HAR QAVATNING O'Z DEVORLARI bo'lishi mumkin. IFC modelida bu odatiy
+  // hol: AdvancedProject.ifc da podvalda 90, 1-qavatda 183 devor bor.
+  // Bitta to'plamni hamma qavatga qo'llash - podvalning devorlari bilan
+  // 1-qavatni hisoblash degani va xato ikki barobargacha yetadi.
+  // Qavatda o'z devorlari bo'lmasa umumiy plandagilari ishlatiladi.
+  const wallsOfFloor = (fl) => {
+    if (!fl?.walls?.length) return extWalls;
+    const own = exteriorWallsOf({ walls: fl.walls }).filter((w) => w.type === 'exterior');
+    return own.length ? own : extWalls;
+  };
   const out = [];      // BOQ qatorlari
   const byFloor = {};  // qavat bo'yicha yopilgan yuza — UI va jadval shu raqamdan foydalanadi
 
@@ -482,13 +493,14 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     const type = fw.type === 'ksho' ? 'ksho' : 'msho';
     const color = fw.color || 'RAL3020';
     const H = Math.max(0.5, Number(fl.height) || 3);
+    const fWalls = wallsOfFloor(fl);
     const agg = {};            // "w x h" -> dona (ikki yuza bilan)
     let extLenTotal = 0;       // tashqi devor uzunligi
     let maxThickness = 0.2;    // eng qalin tashqi devor (tyaga uzunligi uchun)
     let panelAreaM2 = 0;       // panel bilan yopilgan sof yuza (2 yuza)
     let skippedAreaM2 = 0;     // panelга kichik qolgan (proyom qutisi bilan yopiladi)
 
-    for (const w of extWalls) {
+    for (const w of fWalls) {
       const L = wallLengthOf(w);
       if (L < 0.5) continue;
       extLenTotal += L;
@@ -557,7 +569,7 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     addCat(fl, 'qolip_zahvat', cat('Захват монтажный'), N.ZAHVAT_TOTAL);
 
     // --- Burchak elementlari: ЩУВ panellari (TZ-13 da shular ishlatilgan) ---
-    const cornerCount = countCorners(extWalls);
+    const cornerCount = countCorners(fWalls);
     if (cornerCount > 0) {
       // Qavat balandligiga mos ЩУВ burchak paneli
       const hMm = Math.round(H * 1000);
@@ -575,7 +587,7 @@ export function computeFormwork({ plan, floors, rates, rent = false, months = 1 
     }
 
     // --- POL (perekrytiye) qolipi — TZ-13 spetsifikatsiyasi me'yorlari ---
-    const deckArea = deckAreaOf(plan, extWalls);
+    const deckArea = deckAreaOf(plan, fWalls);
     if (deckArea > 0) {
       const d = MINAR.deck;
       const st = pickStoyka(H);

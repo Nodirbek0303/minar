@@ -111,7 +111,11 @@ export function normalizeFloors(plan) {
       underground: !!f.underground,
       formwork: f.formwork && f.formwork.type
         ? { type: f.formwork.type, color: f.formwork.color || 'RAL3020' }
-        : { type: 'msho', color: 'RAL3020' }
+        : { type: 'msho', color: 'RAL3020' },
+      // Qavatning O'Z devorlari (IFC modelida har qavatda boshqacha
+      // bo'ladi). Bu yerda tashlab yuborilsa hisob baribir bitta
+      // to'plamni hamma qavatga qo'llaydi va farq sezilmay qoladi.
+      ...(Array.isArray(f.walls) && f.walls.length ? { walls: f.walls } : {})
     }));
   }
   const h = plan.walls?.[0]?.height || 3;

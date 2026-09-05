@@ -67,7 +67,9 @@ Platforma native formatni soxta tarzda to'liq o'qilgan deb ko'rsatmaydi. Ishchi 
 |---|---|
 | `IfcSIUnit` | Uzunlik, **yuza va hajm birligi alohida** — Revit uzunlikni mm, yuzani m² da yozadi |
 | `IfcBuildingStorey` | Qavat nomi va balandligi; qavat balandligi ketma-ket qavatlar farqidan |
-| `IfcLocalPlacement` | To'liq o'zgartirish: o'rin **va burilish** — usiz devor uchlari joyiga tushmaydi |
+| `IfcLocalPlacement` | To'liq o'zgartirish: o'rin **va burilish** |
+| **`Axis` ko'rinishi** | Devorning o'q chizig'i — uchlari aynan shundan olinadi. Profildan chiqarilsa devorlar bir-biriga **ulanmaydi** va plan sochilib ketadi |
+| `IfcRelVoidsElement` | Proyom qaysi devorda; `IfcDoor.OverallWidth/Height` — eshik o'lchami |
 | `IfcExtrudedAreaSolid` + `IfcRectangleProfileDef` | Devor uzunligi/qalinligi, ustun kesimi, plita qalinligi |
 | `IfcElementQuantity` | Profil topilmasa zaxira manba: uzunlik, yuza, hajm |
 | `Pset_WallCommon.IsExternal` | Devor tashqarimi — taxmin qilinmaydi, modeldan so'raladi |
@@ -80,6 +82,10 @@ Proyomlar (eshik/deraza) `IfcRelVoidsElement` orqali devorga bog'lanadi va
 yuzadan **chegiriladi**. Haqiqiy modellarda o'lchangan ta'sir: qolip yuzasi
 5,5% dan 15,7% gacha kamayadi, panel soni esa ba'zan **oshadi** — proyom
 devorni bo'laklarga bo'lib mayda panel talab qiladi.
+
+Har qavat O'Z devorlarini oladi. `AdvancedProject.ifc` da podvalda 90,
+1-qavatda 183 devor bor — bitta to'plamni hamma qavatga qo'llash **64,8%**
+xato bergan edi.
 
 Geometriya manbalari tartibi: **DXF → IFC → AI rasm tahlili**.
 
@@ -100,6 +106,20 @@ bim-whale to'plami: **440 devor, 357 tasi 5% aniqlik ichida (81%)**.
 Ba'zi eksportlar `NetSideArea` ga devorning **ikkala yuzasini** yozadi
 (LargeBuilding, TallBuilding), ba'zilari bittasini (AdvancedProject).
 O'lchov buni aniqlaydi va **aytadi** — jimgina ikkiga bo'lish xato bo'lardi.
+
+### AI ni o'lchash
+
+Ochiq qavat rejasi to'plamlari (CubiCasa5K) **notijorat** litsenziyada, ArxAI
+esa sotuv platformasi — ularni ishlatish litsenziyani buzadi. Shuning uchun
+sinov chizmalari o'zimizda yasaladi:
+
+```bash
+node tools/reja-rasm.mjs <chiqish>   # IFC -> chizma + to'g'ri javob
+node tools/ai-aniqlik.mjs <papka>    # AI ni o'lchash (kalit kerak)
+```
+
+IFC modelidan geometriya olinadi (to'g'ri javob aniq ma'lum), undan
+qurilish chizmasiga o'xshash rasm chiziladi. Litsenziya toza.
 
 ### Haqiqiy binolar kutubxonasi
 

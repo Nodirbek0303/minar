@@ -345,6 +345,27 @@ function fromExtrusion(entities, repId) {
   return { ...p, extrusion: depthM, source: p.source };
 }
 
+// IFC da devorning O'Q CHIZIG'I alohida ko'rinish sifatida saqlanadi:
+// RepresentationIdentifier = 'Axis'. Devor uchlarini aynan shundan olish
+// kerak. Profil va joylashuvdan chiqarish noto'g'ri: Revit devorni
+// boshlang'ich nuqtasiga joylashtiradi, profilning o'zi esa siljigan
+// bo'ladi — natijada devorlar bir-biriga ulanmaydi va plan «sochilib»
+// ketadi.
+export function axisOf(entities, repId) {
+  const shape = entities.get(repId);
+  if (!shape || shape.type !== 'IFCPRODUCTDEFINITIONSHAPE') return null;
+  for (const r of list(shape.params[2])) {
+    const rep = entities.get(ref(r));
+    if (!rep || rep.type !== 'IFCSHAPEREPRESENTATION') continue;
+    if (str(rep.params[1]).toLowerCase() !== 'axis') continue;
+    for (const item of list(rep.params[3])) {
+      const pts = polygonOf(entities, ref(item));
+      if (pts.length >= 2) return [pts[0], pts[pts.length - 1]];
+    }
+  }
+  return null;
+}
+
 /** Profil o'lchami: to'rtburchak, aylana yoki ixtiyoriy kontur. */
 function profileSize(entities, profile) {
   if (!profile) return null;
@@ -583,6 +604,31 @@ export function saneArea(rawArea, aFactor, lengthM, heightM) {
   return null;
 }
 
+// Devor uchlari: o'q chizig'idan yoki markazdan.
+function wallEnds(entities, e, tf, factor, lengthM) {
+  const axis = axisOf(entities, ref(e.params[6]));
+  if (axis) {
+    const A = applyTransform(tf, axis[0]);
+    const B = applyTransform(tf, axis[1]);
+    if (Math.hypot(B.x - A.x, B.y - A.y) > 1e-6) {
+      return {
+        a: [+(A.x * factor).toFixed(3), +(A.y * factor).toFixed(3)],
+        b: [+(B.x * factor).toFixed(3), +(B.y * factor).toFixed(3)],
+        from: 'axis'
+      };
+    }
+  }
+  if (!lengthM) return null;
+  const half = lengthM / 2;
+  return {
+    a: [+(tf.o.x * factor - tf.x.x * half).toFixed(3),
+        +(tf.o.y * factor - tf.x.y * half).toFixed(3)],
+    b: [+(tf.o.x * factor + tf.x.x * half).toFixed(3),
+        +(tf.o.y * factor + tf.x.y * half).toFixed(3)],
+    from: 'placement'
+  };
+}
+
 // ---------- 7. Asosiy funksiya ----------
 
 /**
@@ -688,20 +734,11 @@ export function readIfc(raw, { maxElements = 200000, maxBytes = MAX_BYTES } = {}
       lengthM: lengthM == null ? null : +lengthM.toFixed(4),
       widthM: widthM == null ? null : +widthM.toFixed(4),
       heightM: heightM == null ? null : +heightM.toFixed(4),
-      // Devor uchlari: markazdan o'z X o'qi bo'ylab yarim uzunlikka.
-      // Aynan shu narsa planni chizadi - usiz devor "qayerdadir" turadi,
-      // lekin qaysi tomonga cho'zilgani noma'lum bo'ladi.
-      ends: (kind === 'wall' && lengthM)
-        ? (() => {
-            const half = lengthM / 2;
-            return {
-              a: [+(place.x * factor - tf.x.x * half).toFixed(3),
-                  +(place.y * factor - tf.x.y * half).toFixed(3)],
-              b: [+(place.x * factor + tf.x.x * half).toFixed(3),
-                  +(place.y * factor + tf.x.y * half).toFixed(3)]
-            };
-          })()
-        : null,
+      // Devor uchlari. Birinchi manba - IFC ning O'Z o'q chizig'i
+      // ('Axis'): u devorning haqiqiy boshi va oxirini beradi va
+      // devorlar bir-biriga ulanadi. O'q berilmagan bo'lsagina
+      // markazdan yarim uzunlikka chiqiladi (zaxira yo'l).
+      ends: kind === 'wall' ? wallEnds(entities, e, tf, factor, lengthM) : null,
       // Yuza GEOMETRIYA bilan tekshiriladi. Haqiqiy modellarda buzuq
       // miqdor uchraydi: BasicHouse.ifc da bitta devorning yuzasi
       // 57 282 798 m² deb yozilgan, yonida esa to'g'ri qiymat 48,02.
@@ -836,6 +873,16 @@ export function placeOpening(wall, opening) {
  */
 export function ifcToPlan(model, { name = 'IFC model' } = {}) {
   const skipped = { noSize: 0, noEnds: 0 };
+  // Devorlar bir necha marta ko'rib chiqiladi (asosiy sath uchun va har
+  // qavat uchun alohida). Tashlangan elementni ikki marta sanamaslik
+  // uchun ular ro'yxatda belgilanadi - aks holda hisobot yolg'on
+  // gapiradi va odam nechta element yo'qolganini bilmaydi.
+  const seenSkips = new Set();
+  const noteSkip = (id, why) => {
+    if (seenSkips.has(id)) return;
+    seenSkips.add(id);
+    skipped[why]++;
+  };
   const byStorey = new Map();
   for (const el of model.elements) {
     const key = el.storey || '(qavatsiz)';
@@ -864,25 +911,44 @@ export function ifcToPlan(model, { name = 'IFC model' } = {}) {
     };
   });
 
-  // Devorlar — birinchi qavatnikidan plan quriladi (plan bitta sath).
-  const level = floors[0]?.name || '(qavatsiz)';
-  const walls = [];
-  for (const el of byStorey.get(level) || []) {
-    if (el.kind !== 'wall') continue;
-    if (!el.lengthM || !el.widthM) { skipped.noSize++; continue; }
-    if (!el.ends) { skipped.noEnds++; continue; }
-    const props = model.properties?.[el.id] || {};
-    walls.push({
-      id: `w${el.id}`,
-      a: el.ends.a,
-      b: el.ends.b,
-      thickness: el.widthM,
-      height: el.heightM ?? floors[0]?.height ?? 3,
-      type: props.IsExternal === true ? 'exterior'
-          : props.IsExternal === false ? 'interior' : undefined,
-      ifcId: el.id,
-      name: el.name
-    });
+  // Qaysi qavatdan plan quriladi. Eng pastki qavat DEVORSIZ bo'lishi
+  // mumkin (masalan «Site» yoki bo'sh texnik qavat) - u holda plan bo'sh
+  // chiqadi va model bekorga rad etiladi. Shuning uchun devori BOR eng
+  // pastki qavat olinadi.
+  const wallCount = (name) =>
+    (byStorey.get(name) || []).filter((e) => e.kind === 'wall' && e.lengthM).length;
+  const level = floors.find((f) => wallCount(f.name) > 0)?.name
+             || floors[0]?.name || '(qavatsiz)';
+
+  const wallsOf = (name) => {
+    const out = [];
+    for (const el of byStorey.get(name) || []) {
+      if (el.kind !== 'wall') continue;
+      if (!el.lengthM || !el.widthM) { noteSkip(el.id, 'noSize'); continue; }
+      if (!el.ends) { noteSkip(el.id, 'noEnds'); continue; }
+      const props = model.properties?.[el.id] || {};
+      out.push({
+        id: `w${el.id}`,
+        a: el.ends.a,
+        b: el.ends.b,
+        thickness: el.widthM,
+        height: el.heightM ?? floors[0]?.height ?? 3,
+        type: props.IsExternal === true ? 'exterior'
+            : props.IsExternal === false ? 'interior' : undefined,
+        ifcId: el.id,
+        name: el.name
+      });
+    }
+    return out;
+  };
+
+  const walls = wallsOf(level);
+
+  // Har qavatga O'Z devorlari biriktiriladi: podvalda 90, 1-qavatda 183
+  // devor bo'lishi mumkin va ularni bitta to'plam bilan hisoblash xato.
+  for (const f of floors) {
+    const own = wallsOf(f.name);
+    if (own.length) f.walls = own;
   }
 
   const columns = (byStorey.get(level) || [])

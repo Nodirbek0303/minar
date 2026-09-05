@@ -297,3 +297,25 @@ test('IKKI VARIANT: arenda rejimi ikkalasiga ham qo\'llanadi', () => {
     assert.ok(rent[id].boq.total < buy[id].boq.total, id + ': arenda arzonroq');
   }
 });
+
+test('qavatning o\'z devorlari hisobda ishlatiladi', () => {
+  // IFC modelida har qavatda boshqa devorlar bo'ladi. Bitta to'plamni
+  // hammaga qo'llash AdvancedProject.ifc da 64,8% xato bergan edi.
+  const w = (id, x2) => ({ id, a: [0, 0], b: [x2, 0], thickness: 0.3, height: 3, type: 'exterior' });
+  const plan = {
+    meta: { name: 'sinov', units: 'm' },
+    walls: [w('a', 10)],
+    openings: [], rooms: [],
+    floors: [
+      { id: 'f0', name: 'Podval', height: 3, formwork: { type: 'msho', color: 'RAL3020' },
+        walls: [w('a', 10)] },
+      { id: 'f1', name: '1-qavat', height: 3, formwork: { type: 'msho', color: 'RAL3020' },
+        walls: [w('b', 10), w('c', 10), w('d', 10)] }
+    ]
+  };
+  const bilan = computeQuantities(plan, {}).quantities.facadeArea;
+  const siz = computeQuantities(
+    { ...plan, floors: plan.floors.map(({ walls, ...f }) => f) }, {}
+  ).quantities.facadeArea;
+  assert.ok(bilan > siz * 1.5, `o'z devorlari bilan ${bilan}, bittasi bilan ${siz}`);
+});

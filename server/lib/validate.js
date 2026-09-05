@@ -152,7 +152,13 @@ export function validateFloors(floors) {
       formwork: {
         type: ['classic', 'ksho', 'msho'].includes(fw.type) ? fw.type : 'msho',
         color: ['RAL3020', 'RAL9005', 'RAL2004'].includes(fw.color) ? fw.color : 'RAL3020'
-      }
+      },
+      // Qavatning o'z devorlari - IFC modelidan keladi. Ular ham
+      // tekshiriladi: tashlab yuborsak hisob noto'g'ri qavat devorlari
+      // bilan yuritiladi va buni hech kim sezmaydi.
+      ...(Array.isArray(f?.walls) && f.walls.length
+        ? { walls: validatePlan({ walls: f.walls, floors: null }).walls }
+        : {})
     };
   });
 }
