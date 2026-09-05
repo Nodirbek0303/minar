@@ -91,8 +91,20 @@ function centred(walls) {
 }
 
 export function comparePlans(truth, got, { tol = 1.0, centre = true } = {}) {
-  const T = centre ? centred(truth?.walls || []) : (truth?.walls || []);
-  const G = centre ? centred(got?.walls || []) : (got?.walls || []);
+  // Markazlashtirish har doim ham yaxshi emas: agar bitta planda
+  // devorlar kam bo'lsa, uning markazi boshqasinikiga to'g'ri kelmaydi
+  // va MOS KELGAN devorlar ham yo'qoladi. Shuning uchun ikkala yo'l
+  // sinaladi va KO'PROQ mos kelgani olinadi - o'lchov o'zini kamsitmasin
+  // ham, oshirib ham ko'rsatmasin.
+  if (centre) {
+    const raw = compareRaw(truth?.walls || [], got?.walls || [], tol);
+    const mid = compareRaw(centred(truth?.walls || []), centred(got?.walls || []), tol);
+    return mid.matched > raw.matched ? mid : raw;
+  }
+  return compareRaw(truth?.walls || [], got?.walls || [], tol);
+}
+
+function compareRaw(T, G, tol) {
   const used = new Set();
   let matched = 0, lenError = 0;
   for (const t of T) {
