@@ -6,6 +6,7 @@ Chizma yuklash → AI/geometrik tahlil → **MINAR qolip spetsifikatsiyasi va sm
 
 | Modul | Tavsif |
 |---|---|
+| 🧱 **IFC o'quvchisi** | Revit/Tekla/ArchiCAD dan chiqqan IFC dan geometriya o'qiladi: `IfcExtrudedAreaSolid` profillari, `IfcLocalPlacement` zanjiri (burilish bilan), `IfcElementQuantity` miqdorlari va `Pset_WallCommon.IsExternal`. O'lchami topilmagan element hisobga **kirmaydi** |
 | ◈ **BIM koordinatsiya markazi** | Loyiha manbalari, IFC/DXF almashuv modellari, reviziya holati va AR/KR/MEP koordinatsiya masalalari bitta CDE panelida |
 | 📥 **Ko'p faylli yuklash** | Bir vaqtda 20 tagacha hujjat: IFC, DXF/DWG, PDF, JPG/PNG/WEBP, DOCX, XLSX, TXT/CSV — sudrab tashlash bilan |
 | 📖 **Hujjatlarni birga o'qish** | Chizmadan geometriya, PDF/DOCX/XLSX matnidan qavatlar, balandliklar va gabarit; hammasi bitta tahlilda birlashtiriladi |
@@ -43,7 +44,7 @@ npm start          # http://localhost:3001 da ham API, ham UI
 | Format | Nima olinadi |
 |---|---|
 | `.dxf` | Devor geometriyasi, xonalar, ochiqliklar, ustunlar (aniq o'lchamda) |
-| `.ifc` | OpenBIM almashuv modeli: IFC sxemasi va asosiy elementlar tekshiriladi, model reviziyasi BIM markazida saqlanadi |
+| `.ifc` | **To'liq geometriya**: devor uchlari va qalinligi, ustun kesimi, plita, qavatlar va balandliklari. Plan IFC dan quriladi va to'g'ridan-to'g'ri qolip hisobiga tushadi |
 | `.pdf` | Sahifalar rasmga o'giriladi (AI ko'rish uchun) + matn (`pdftotext`) |
 | `.jpg .png .webp` | Chizma rasmi — AI vision o'qiydi |
 | `.docx` | Word matni: qavatlar, balandliklar, texnik talablar |
@@ -59,6 +60,23 @@ Platforma native formatni soxta tarzda to'liq o'qilgan deb ko'rsatmaydi. Ishchi 
 `AutoCAD (DXF export) → aniq 2D geometriya va qolip hisobi`
 
 `.rvt` va `.dwg` fayllari manba/arxiv sifatida biriktirilishi mumkin; server tomonda haqiqiy model geometriyasi uchun IFC yoki DXF kerak. Native RVT viewer uchun keyingi production integratsiya Autodesk APS (OAuth, Model Derivative API) ulanishini talab qiladi.
+
+#### IFC dan nima o'qiladi
+
+| IFC tushunchasi | Nima olinadi |
+|---|---|
+| `IfcSIUnit` | Uzunlik, **yuza va hajm birligi alohida** — Revit uzunlikni mm, yuzani m² da yozadi |
+| `IfcBuildingStorey` | Qavat nomi va balandligi; qavat balandligi ketma-ket qavatlar farqidan |
+| `IfcLocalPlacement` | To'liq o'zgartirish: o'rin **va burilish** — usiz devor uchlari joyiga tushmaydi |
+| `IfcExtrudedAreaSolid` + `IfcRectangleProfileDef` | Devor uzunligi/qalinligi, ustun kesimi, plita qalinligi |
+| `IfcElementQuantity` | Profil topilmasa zaxira manba: uzunlik, yuza, hajm |
+| `Pset_WallCommon.IsExternal` | Devor tashqarimi — taxmin qilinmaydi, modeldan so'raladi |
+
+Har o'lcham uchun **manbasi** saqlanadi (`profile` / `quantity` / `bbox`).
+Manbasi topilmagan o'lcham `null` bo'lib qoladi va hisobga kirmaydi —
+nol uzunlikli devor smetani jimgina buzadi, uni hech kim sezmaydi.
+
+Geometriya manbalari tartibi: **DXF → IFC → AI rasm tahlili**.
 
 Bir so'rovda **20 tagacha** fayl, har biri 30 MB gacha. Geometriya manbai sifatida DXF ustun
 turadi; DXF bo'lmasa AI rasm tahlilidan foydalaniladi. Qavatlar avval AI dan, u bo'lmasa

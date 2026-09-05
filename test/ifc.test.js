@@ -1,0 +1,241 @@
+// IFC o'quvchisi — BIM modelidan haqiqiy geometriya.
+//
+// Ilgari IFC fayl faqat sarlavhasidan tanilardi va undan bironta devor
+// chiqmasdi. Bu yerdagi asosiy talab: o'lcham TO'G'RI chiqsin yoki
+// UMUMAN chiqmasin. Noto'g'ri o'lcham hisobga jimgina tushib ketadi va
+// uni hech kim sezmaydi — o'lchamsiz element esa ko'rinib turadi.
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import {
+  readIfc, parseStep, tokenizeParams, lengthScale, areaScale, placementOf, ifcToPlan
+} from '../server/lib/ifc.js';
+
+const dir = path.dirname(fileURLToPath(import.meta.url));
+const SAMPLE = fs.readFileSync(path.join(dir, 'fixtures/kichik-bino.ifc'), 'utf8');
+
+// --- STEP formatini o'qish --------------------------------------------
+
+test('qavslar ichidagi vergul bo\'linish nuqtasi bo\'lmaydi', () => {
+  assert.deepEqual(tokenizeParams("'a',(1.,2.,3.),#5"), ["'a'", '(1.,2.,3.)', '#5']);
+});
+
+test('satr ichidagi vergul ham bo\'lmaydi', () => {
+  assert.deepEqual(tokenizeParams("'Devor, tashqi',#5"), ["'Devor, tashqi'", '#5']);
+});
+
+test('IFC dagi qochirilgan apostrof matnni buzmaydi', () => {
+  const e = parseStep("DATA;\n#1=IFCWALL('a''b',$);\nENDSEC;");
+  assert.equal(e.get(1).type, 'IFCWALL');
+});
+
+test('yozuvlar jadvalga tushadi', () => {
+  const e = parseStep(SAMPLE);
+  assert.ok(e.size > 30);
+  assert.equal(e.get(120).type, 'IFCWALLSTANDARDCASE');
+});
+
+// --- Birlik: eng xavfli joy -------------------------------------------
+
+test('millimetr metrga o\'giriladi', () => {
+  assert.equal(lengthScale(parseStep(SAMPLE)).factor, 0.001);
+});
+
+test('yuza birligi uzunlikdan ALOHIDA o\'qiladi', () => {
+  // Revit uzunlikni mm da, yuzani m² da yozadi. Yuzani uzunlik
+  // koeffitsiyentiga ko'paytirish natijani million marta kichraytiradi.
+  const e = parseStep(SAMPLE);
+  assert.equal(areaScale(e, 0.001), 1);
+});
+
+test('birlik e\'lon qilinmagan bo\'lsa metr deb olinadi', () => {
+  const e = parseStep('DATA;\n#1=IFCWALL($,$);\nENDSEC;');
+  assert.equal(lengthScale(e).factor, 1);
+});
+
+// --- Geometriya: asosiy natija ----------------------------------------
+
+test('devor o\'lchami profildan chiqadi', () => {
+  const w = readIfc(SAMPLE).elements.find((e) => e.kind === 'wall');
+  assert.equal(w.lengthM, 6);
+  assert.equal(w.widthM, 0.3);
+  assert.equal(w.heightM, 2.8);
+  assert.equal(w.source, 'profile');
+});
+
+test('ustun va plita ham o\'qiladi', () => {
+  const r = readIfc(SAMPLE);
+  const col = r.elements.find((e) => e.kind === 'column');
+  const slab = r.elements.find((e) => e.kind === 'slab');
+  assert.equal(col.lengthM, 0.4);
+  assert.equal(col.widthM, 0.4);
+  assert.equal(slab.lengthM, 12);
+  assert.equal(slab.heightM, 0.2);
+});
+
+test('miqdorlardan yuza olinadi', () => {
+  const w = readIfc(SAMPLE).elements.find((e) => e.kind === 'wall');
+  assert.equal(w.areaM2, 16.8);
+});
+
+// --- Joylashuv zanjiri ------------------------------------------------
+
+test('element koordinatasi qavatga nisbatan qo\'shiladi', () => {
+  const w = readIfc(SAMPLE).elements.find((e) => e.kind === 'wall');
+  assert.equal(w.x, 1);
+  assert.equal(w.y, 2);
+});
+
+test('joylashuv halqasi cheksiz rekursiyaga olib bormaydi', () => {
+  // Buzuq faylda A->B->A bo'lishi mumkin; o'quvchi qotib qolmasin.
+  const e = parseStep(
+    'DATA;\n#1=IFCLOCALPLACEMENT(#2,$);\n#2=IFCLOCALPLACEMENT(#1,$);\nENDSEC;'
+  );
+  const p = placementOf(e, 1);
+  assert.deepEqual(p, { x: 0, y: 0, z: 0 });
+});
+
+// --- Qavatlar ---------------------------------------------------------
+
+test('qavatlar balandligi bo\'yicha tartiblanadi', () => {
+  const s = readIfc(SAMPLE).storeys;
+  assert.deepEqual(s.map((x) => x.name), ['Podval', '1-qavat']);
+  assert.equal(s[0].elevation, -3);
+});
+
+test('element qaysi qavatda ekani ko\'rsatiladi', () => {
+  const w = readIfc(SAMPLE).elements.find((e) => e.kind === 'wall');
+  assert.equal(w.storey, 'Podval');
+});
+
+// --- Rad etish --------------------------------------------------------
+
+test('IFC bo\'lmagan fayl rad etiladi', () => {
+  assert.throws(() => readIfc('bu oddiy matn'), /ISO-10303-21/);
+});
+
+test('bo\'sh IFC xato beradi', () => {
+  assert.throws(() => readIfc('ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;'),
+    /bironta yozuv/);
+});
+
+test('geometriyasiz model haqida ogohlantiriladi', () => {
+  const raw = `ISO-10303-21;
+DATA;
+#1=IFCBUILDINGSTOREY('a',$,'Q1',$,$,$,$,$,.ELEMENT.,0.);
+#2=IFCWALL('b',$,'Devor',$,$,$,$,$,$);
+ENDSEC;`;
+  const r = readIfc(raw);
+  assert.equal(r.stats.measured, 0);
+  assert.ok(r.problems.some((p) => /o'lcham yo'q/.test(p)));
+});
+
+test('o\'lchamsiz element null bo\'ladi, nol emas', () => {
+  // Nol o'lcham hisobga tushsa "0 m² qolip" chiqadi va bu sezilmaydi.
+  const raw = `ISO-10303-21;
+DATA;
+#2=IFCWALL('b',$,'Devor',$,$,$,$,$,$);
+ENDSEC;`;
+  const w = readIfc(raw).elements[0];
+  assert.equal(w.lengthM, null);
+  assert.equal(w.source, null);
+});
+
+// --- Xossalar ---------------------------------------------------------
+
+test('devor tashqarimi — modelning o\'zidan so\'raladi', () => {
+  // Taxmin qilish o'rniga Pset_WallCommon.IsExternal o'qiladi.
+  const r = readIfc(SAMPLE);
+  const w = r.elements.find((e) => e.kind === 'wall');
+  assert.equal(r.properties[w.id].IsExternal, true);
+  assert.equal(r.properties[w.id].LoadBearing, true);
+});
+
+// --- Devor yo'nalishi -------------------------------------------------
+
+test('devor uchlari o\'z o\'qi bo\'ylab hisoblanadi', () => {
+  // Markaz (1,2), uzunlik 6 -> uchlari (-2,2) va (4,2).
+  const w = readIfc(SAMPLE).elements.find((e) => e.kind === 'wall');
+  assert.deepEqual(w.ends.a, [-2, 2]);
+  assert.deepEqual(w.ends.b, [4, 2]);
+});
+
+test('burilgan devor ham to\'g\'ri joylashadi', () => {
+  // RefDirection (0,1,0) — devor Y o'qi bo'ylab cho'zilgan.
+  const raw = `ISO-10303-21;
+DATA;
+#11=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#31=IFCCARTESIANPOINT((0.,0.,0.));
+#30=IFCAXIS2PLACEMENT3D(#31,$,$);
+#40=IFCLOCALPLACEMENT($,#30);
+#50=IFCDIRECTION((0.,1.,0.));
+#51=IFCCARTESIANPOINT((5.,5.,0.));
+#52=IFCAXIS2PLACEMENT3D(#51,$,#50);
+#53=IFCLOCALPLACEMENT(#40,#52);
+#110=IFCCARTESIANPOINT((0.,0.));
+#111=IFCAXIS2PLACEMENT2D(#110,$);
+#112=IFCRECTANGLEPROFILEDEF(.AREA.,'W',#111,4.,0.2);
+#114=IFCAXIS2PLACEMENT3D(#31,$,$);
+#116=IFCDIRECTION((0.,0.,1.));
+#115=IFCEXTRUDEDAREASOLID(#112,#114,#116,3.);
+#117=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#115));
+#118=IFCPRODUCTDEFINITIONSHAPE($,$,(#117));
+#120=IFCWALL('w',$,'Burilgan',$,$,#53,#118,$,$);
+ENDSEC;`;
+  const w = readIfc(raw).elements[0];
+  assert.deepEqual(w.ends.a, [5, 3]);
+  assert.deepEqual(w.ends.b, [5, 7]);
+});
+
+// --- Planga o'girish --------------------------------------------------
+
+test('IFC hisob planiga aylanadi', () => {
+  const plan = ifcToPlan(readIfc(SAMPLE), { name: 'Sinov' });
+  assert.equal(plan.meta.source, 'ifc');
+  assert.equal(plan.walls.length, 1);
+  assert.equal(plan.walls[0].thickness, 0.3);
+  assert.equal(plan.walls[0].type, 'exterior');   // IsExternal dan
+  assert.equal(plan.columns.length, 1);
+});
+
+test('qavat balandligi ketma-ket qavatlar farqidan chiqadi', () => {
+  const plan = ifcToPlan(readIfc(SAMPLE));
+  assert.equal(plan.floors[0].name, 'Podval');
+  assert.equal(plan.floors[0].height, 3);         // -3 dan 0 gacha
+  assert.equal(plan.floors[0].underground, true);
+});
+
+test('o\'lchamsiz devor planga TUSHMAYDI', () => {
+  // Nol uzunlikli devor hisobda ko'rinmaydi va smetani jimgina buzadi.
+  const raw = `ISO-10303-21;
+DATA;
+#1=IFCBUILDINGSTOREY('a',$,'Q1',$,$,$,$,$,.ELEMENT.,0.);
+#2=IFCWALL('b',$,'Olchamsiz',$,$,$,$,$,$);
+#3=IFCRELCONTAINEDINSPATIALSTRUCTURE('r',$,$,$,(#2),#1);
+ENDSEC;`;
+  const plan = ifcToPlan(readIfc(raw));
+  assert.equal(plan.walls.length, 0);
+  assert.equal(plan.meta.analysis.skipped.noSize, 1);
+});
+
+// --- Tezlik -----------------------------------------------------------
+
+test('katta model muzlatib qo\'ymaydi', () => {
+  // 5000 devor: xossalar indekssiz kvadratik bo'lib ketardi.
+  let raw = `ISO-10303-21;\nDATA;\n#11=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);\n`;
+  const ids = [];
+  for (let i = 0; i < 800; i++) {
+    const b = 1000 + i * 10;
+    raw += `#${b}=IFCWALL('w${i}',$,'D${i}',$,$,$,$,$,$);\n`;
+    ids.push(`#${b}`);
+  }
+  raw += `#99=IFCBUILDINGSTOREY('a',$,'Q1',$,$,$,$,$,.ELEMENT.,0.);\n`;
+  raw += `#98=IFCRELCONTAINEDINSPATIALSTRUCTURE('r',$,$,$,(${ids.join(',')}),#99);\nENDSEC;`;
+  const t0 = Date.now();
+  const r = readIfc(raw);
+  assert.equal(r.stats.total, 800);
+  assert.ok(Date.now() - t0 < 3000, 'o\'qish 3 soniyadan oshdi');
+});

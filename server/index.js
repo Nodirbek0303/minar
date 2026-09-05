@@ -18,10 +18,11 @@ import {
   SUPPORTED_EXT, fileKind, textOf, imageDataUri, pdfToImages, cleanupDir, popplerAvailable
 } from './lib/extract.js';
 import { parseFloorsFromText, parseSize, describeParsed } from './lib/docparse.js';
+import { readIfc, ifcToPlan } from './lib/ifc.js';
 import { detectRole, ROLES } from './lib/docrole.js';
 import { parseSpecification, compareToSpec } from './lib/specparse.js';
 import {
-  validatePlan, validateFloors, validateRates, validatePriceOverrides, validateOpts, ValidationError
+  validatePlan, validateFloors, validateRates, validatePriceOverrides, validateOpts, ValidationError, LIMITS
 } from './lib/validate.js';
 import {
   authEnabled, requireAuth, checkPassword, createSession, destroySession,
@@ -253,6 +254,7 @@ app.post('/api/analyze-batch', async (req, res, next) => {
   const texts = [];        // hujjat matnlari
   const tmpDirs = [];
   let dxfPlan = null, dxfFileName = null;
+  let ifcPlan = null, ifcFileName = null;   // IFC dan qurilgan plan
 
   try {
     for (const f of files) {
@@ -274,18 +276,47 @@ app.post('/api/analyze-batch', async (req, res, next) => {
         continue;
       }
 
-      // IFC — openBIM almashuv modeli. Ushbu versiyada geometriyani IFC
-      // viewer emas, DXF/AI reja hisobga oladi; ammo model tarkibi tekshirilib,
-      // koordinatsiya markaziga loyiha manbasi sifatida biriktiriladi.
+      // IFC — openBIM almashuv modeli. Endi undan GEOMETRIYA o'qiladi:
+      // devor uchlari, qalinligi, ustun kesimi va qavatlar. Ilgari bu yerda
+      // faqat sarlavha tekshirilardi va model hisobga kirmasdan chetda
+      // qolardi — Revit dan chiqqan model foydasiz edi.
       if (kind === 'ifc') {
         const raw = await fs.promises.readFile(full, 'utf8');
-        const schema = /FILE_SCHEMA\s*\(\s*\(?'([^')]+)'?/i.exec(raw)?.[1] || 'IFC';
-        const walls = (raw.match(/IFCWALL(?:STANDARDCASE)?\s*\(/gi) || []).length;
-        const slabs = (raw.match(/IFCSLAB\s*\(/gi) || []).length;
-        const columns = (raw.match(/IFCCOLUMN\s*\(/gi) || []).length;
-        if (!/ISO-10303-21/i.test(raw.slice(0, 2000))) throw new Error('IFC STEP sarlavhasi topilmadi');
-        report.push({ name: f.name, kind, role: 'bim', roleTitle: 'OpenBIM model', ok: true,
-          info: `${schema}: ${walls} devor, ${slabs} plita, ${columns} ustun — BIM markaziga biriktirildi` });
+        const model = readIfc(raw);
+        const c = model.stats.counts;
+        const parts = [
+          c.wall ? `${c.wall} devor` : null,
+          c.column ? `${c.column} ustun` : null,
+          c.slab ? `${c.slab} plita` : null,
+          c.beam ? `${c.beam} to'sin` : null
+        ].filter(Boolean);
+
+        // Geometriya chiqqan bo'lsa — plan quriladi va hisobga tushadi.
+        // Chiqmasa model baribir BIM markazida qoladi, lekin buni
+        // yashirmaymiz: nima uchun hisobga kirmagani aytiladi.
+        const built = ifcToPlan(model, { name: f.name.replace(/\.ifc$/i, '') });
+        // Juda katta model butun tahlilni yiqitmasin: validatePlan uni rad
+        // etib 400 qaytarardi va foydalanuvchi qolgan fayllar natijasini
+        // ham ko'rmasdi. Endi shu model chetga qo'yiladi, sabab aytiladi.
+        const tooBig = built.walls.length > LIMITS.MAX_WALLS;
+        // Bir necha IFC yuklansa - devori ko'prog'i olinadi (DXF dagi kabi)
+        if (!tooBig && built.walls.length >= 3 &&
+            (!ifcPlan || built.walls.length > ifcPlan.walls.length)) {
+          ifcPlan = built;
+          ifcFileName = f.name;
+        }
+        const note = tooBig
+          ? `model juda katta (${built.walls.length} devor, chegara ${LIMITS.MAX_WALLS}) — ` +
+            'bitta qavatni alohida eksport qiling'
+          : built.walls.length >= 3
+            ? `plan IFC dan qurildi (${built.walls.length} devor, ${built.floors.length} qavat)`
+            : 'geometriya yetarli emas — hisob uchun DXF yoki reja kerak';
+
+        report.push({
+          name: f.name, kind, role: 'bim', roleTitle: 'OpenBIM model', ok: true,
+          info: `${model.schema} (${model.unit}): ${parts.join(', ') || 'element topilmadi'} — ${note}`,
+          problems: model.problems
+        });
         continue;
       }
 
@@ -369,12 +400,20 @@ app.post('/api/analyze-batch', async (req, res, next) => {
       }
     }
 
-    // --- Geometriyani birlashtirish: DXF ustun, bo'lmasa AI ---
+    // --- Geometriyani birlashtirish: DXF > IFC > AI ---
+    // DXF birinchi bo'lib qoladi (hisob o'shanga kalibrlangan), lekin
+    // endi DXF bo'lmasa IFC ishlaydi - ilgari bunday holatda model
+    // butunlay chetda qolar va "chizma aniqlanmadi" deyilardi.
     let plan;
     if (dxfPlan) {
       plan = validatePlan(dxfPlan);
       plan.meta.analysis = dxfPlan.meta.analysis;
       plan.meta.source = 'dxf';
+    } else if (ifcPlan) {
+      plan = validatePlan(ifcPlan);
+      plan.meta.analysis = ifcPlan.meta.analysis;
+      plan.meta.source = 'ifc';
+      plan.meta.name = ifcPlan.meta.name;
     } else if (ai && ai.walls.length) {
       plan = validatePlan({
         meta: { name: ai.name || 'AI tahlil', source: 'ai-docs', level: '1-qavat' },
