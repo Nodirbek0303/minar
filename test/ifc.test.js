@@ -239,3 +239,108 @@ test('katta model muzlatib qo\'ymaydi', () => {
   assert.equal(r.stats.total, 800);
   assert.ok(Date.now() - t0 < 3000, 'o\'qish 3 soniyadan oshdi');
 });
+
+// --- Haqiqiy fayllardan chiqqan xatolar --------------------------------
+// Quyidagilarning har biri buildingSMART va bim-whale to'plamidagi
+// HAQIQIY modellarda topilgan kamchiliklar. Sun'iy fikstura ularni
+// ko'rsatmagan edi.
+
+test('STEP izohi yozuvni yutib yubormaydi', () => {
+  // buildingSMART etalon fayllarida /* ... */ izohlari bor. Izohda
+  // nuqta-vergul yo'q, shuning uchun u keyingi yozuvga yopishib qolar
+  // va o'sha yozuv butunlay yo'qolardi — devor topilmasdi.
+  const raw = `ISO-10303-21;
+DATA;
+/* the wall itself ------------------------------------ */
+#45 = IFCWALL('guid', #2, 'Devor', $, $, $, $, $, $);
+ENDSEC;`;
+  const r = readIfc(raw);
+  assert.equal(r.stats.total, 1);
+  assert.equal(r.elements[0].name, 'Devor');
+});
+
+test('bo\'sh joyli tenglik belgisi ham o\'qiladi', () => {
+  // Ba'zi eksportlar `#45 = IFCWALL(...)` deb yozadi, ba'zilari `#45=...`
+  const r = readIfc("ISO-10303-21;\nDATA;\n#1 = IFCWALL('g',$,'D',$,$,$,$,$,$);\nENDSEC;");
+  assert.equal(r.stats.total, 1);
+});
+
+test('profil bo\'lmasa chegara qutisi ishlatiladi', () => {
+  // Zinapoya va poydevor Brep/Tessellation bilan yoziladi — aniq profili
+  // yo'q, lekin gabariti baribir foydali.
+  const raw = `ISO-10303-21;
+DATA;
+#11=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCCARTESIANPOINT((4.,0.,0.));
+#3=IFCCARTESIANPOINT((4.,2.,3.));
+#4=IFCCARTESIANPOINT((0.,2.,3.));
+#5=IFCPOLYLOOP((#1,#2,#3,#4));
+#6=IFCFACEOUTERBOUND(#5,.T.);
+#7=IFCFACE((#6));
+#8=IFCCLOSEDSHELL((#7));
+#9=IFCFACETEDBREP(#8);
+#10=IFCSHAPEREPRESENTATION($,'Body','Brep',(#9));
+#12=IFCPRODUCTDEFINITIONSHAPE($,$,(#10));
+#20=IFCFOOTING('g',$,'Poydevor',$,$,$,#12,$,$);
+ENDSEC;`;
+  const el = readIfc(raw).elements[0];
+  assert.equal(el.source, 'bbox');
+  assert.equal(el.lengthM, 4);
+  assert.equal(el.widthM, 2);
+  assert.equal(el.heightM, 3);
+});
+
+test('chegara qutisi ANIQ o\'lchamni siqib chiqarmaydi', () => {
+  // Eng muhim tartib: profil > miqdor > chegara. Zinapoyaning gabariti
+  // uning qalinligi emas — taxmin aniq raqamni bosib ketmasligi kerak.
+  const raw = `ISO-10303-21;
+DATA;
+#11=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#1=IFCCARTESIANPOINT((0.,0.,0.));
+#2=IFCCARTESIANPOINT((9.,9.,9.));
+#3=IFCCARTESIANPOINT((9.,0.,0.));
+#4=IFCCARTESIANPOINT((0.,9.,0.));
+#5=IFCPOLYLOOP((#1,#2,#3,#4));
+#6=IFCFACEOUTERBOUND(#5,.T.);
+#7=IFCFACE((#6));
+#8=IFCCLOSEDSHELL((#7));
+#9=IFCFACETEDBREP(#8);
+#10=IFCSHAPEREPRESENTATION($,'Body','Brep',(#9));
+#12=IFCPRODUCTDEFINITIONSHAPE($,$,(#10));
+#20=IFCWALL('g',$,'Devor',$,$,$,#12,$,$);
+#30=IFCQUANTITYLENGTH('Length',$,$,5.,$);
+#31=IFCQUANTITYLENGTH('Width',$,$,0.25,$);
+#32=IFCELEMENTQUANTITY('q',$,'Qty',$,$,(#30,#31));
+#33=IFCRELDEFINESBYPROPERTIES('r',$,$,$,(#20),#32);
+ENDSEC;`;
+  const el = readIfc(raw).elements[0];
+  assert.equal(el.lengthM, 5);      // miqdordan, 9 emas
+  assert.equal(el.widthM, 0.25);    // miqdordan, 9 emas
+  assert.equal(el.source, 'quantity');
+});
+
+test('kesilgan solid asosidan o\'qiladi', () => {
+  // Revit tomga tegib turgan devorni IfcBooleanClippingResult qilib
+  // yozadi; asosiy shakl birinchi operandda turadi.
+  const raw = `ISO-10303-21;
+DATA;
+#11=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#1=IFCCARTESIANPOINT((0.,0.));
+#2=IFCAXIS2PLACEMENT2D(#1,$);
+#3=IFCRECTANGLEPROFILEDEF(.AREA.,'W',#2,6.,0.3);
+#4=IFCCARTESIANPOINT((0.,0.,0.));
+#5=IFCAXIS2PLACEMENT3D(#4,$,$);
+#6=IFCDIRECTION((0.,0.,1.));
+#7=IFCEXTRUDEDAREASOLID(#3,#5,#6,3.);
+#8=IFCBOOLEANCLIPPINGRESULT(.DIFFERENCE.,#7,#9);
+#9=IFCHALFSPACESOLID($,.F.);
+#10=IFCSHAPEREPRESENTATION($,'Body','Clipping',(#8));
+#12=IFCPRODUCTDEFINITIONSHAPE($,$,(#10));
+#20=IFCWALL('g',$,'Kesilgan devor',$,$,$,#12,$,$);
+ENDSEC;`;
+  const el = readIfc(raw).elements[0];
+  assert.equal(el.lengthM, 6);
+  assert.equal(el.widthM, 0.3);
+  assert.equal(el.source, 'profile');
+});

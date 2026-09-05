@@ -57,6 +57,14 @@ export function parseStep(raw) {
   let i = 0, cur = '', inStr = false;
   while (i < body.length) {
     const c = body[i];
+    // STEP izohi: /* ... */. Izohda nuqta-vergul bo'lmagani uchun u
+    // keyingi yozuvga yopishib qolardi va o'sha yozuv butunlay
+    // yo'qolardi. buildingSMART ning barcha etalon fayllarida izoh bor.
+    if (!inStr && c === '/' && body[i + 1] === '*') {
+      const end = body.indexOf('*/', i + 2);
+      i = end < 0 ? body.length : end + 2;
+      continue;
+    }
     if (inStr) {
       if (c === "'" && body[i + 1] === "'") { cur += "''"; i += 2; continue; }
       if (c === "'") inStr = false;
@@ -296,11 +304,15 @@ function fromExtrusion(entities, repId) {
       const src = entities.get(ref(e.params[0]));
       return src ? collect(ref(src.params[1]), depth + 1) : [];
     }
+    // Kesilgan solid (IfcBooleanClippingResult): asosi birinchi operand
+    if (e.type === 'IFCBOOLEANCLIPPINGRESULT' || e.type === 'IFCBOOLEANRESULT') {
+      return collect(ref(e.params[1]), depth + 1);
+    }
     return [];
   };
 
   const solids = collect(repId);
-  if (!solids.length) return null;
+  if (!solids.length) return boundingBoxOf(entities, repId);
   const solid = solids[0];
   const depthM = num(solid.params[3]);          // chiqarish uzunligi
   const profile = entities.get(ref(solid.params[0]));
@@ -336,6 +348,49 @@ function profileSize(entities, profile) {
     default:
       return null;
   }
+}
+
+// Chiqarilgan solid bo'lmasa - qo'pol chegara qutisi. Zinapoya, poydevor
+// va murakkab shakllar Brep yoki Tessellation bilan yoziladi; ularning
+// aniq profili yo'q, lekin gabaritini bilish hisob uchun baribir foydali.
+// Manba 'bbox' deb belgilanadi - bu taxminiy o'lcham ekani ko'rinib tursin.
+function boundingBoxOf(entities, repId) {
+  const pts = [];
+  const seen = new Set();
+  const walk = (id, depth = 0) => {
+    if (!id || depth > 14 || seen.has(id) || pts.length > 40000) return;
+    seen.add(id);
+    const e = entities.get(id);
+    if (!e) return;
+    if (e.type === 'IFCCARTESIANPOINT') {
+      const c = list(e.params[0]).map(num);
+      if (c.length >= 2) pts.push({ x: c[0] ?? 0, y: c[1] ?? 0, z: c[2] ?? 0 });
+      return;
+    }
+    if (e.type === 'IFCCARTESIANPOINTLIST3D' || e.type === 'IFCCARTESIANPOINTLIST2D') {
+      for (const row of list(e.params[0])) {
+        const c = tokenizeParams(row.trim().replace(/^\(|\)$/g, '')).map(num);
+        if (c.length >= 2) pts.push({ x: c[0] ?? 0, y: c[1] ?? 0, z: c[2] ?? 0 });
+      }
+      return;
+    }
+    for (const p of e.params) {
+      const r = ref(p);
+      if (r) { walk(r, depth + 1); continue; }
+      for (const item of list(p)) {
+        const r2 = ref(item);
+        if (r2) walk(r2, depth + 1);
+      }
+    }
+  };
+  walk(repId);
+  if (pts.length < 4) return null;
+  const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y), zs = pts.map((p) => p.z);
+  const a = Math.max(...xs) - Math.min(...xs);
+  const b = Math.max(...ys) - Math.min(...ys);
+  const h = Math.max(...zs) - Math.min(...zs);
+  if (!(a > 0) && !(b > 0) && !(h > 0)) return null;
+  return { a, b, extrusion: h, source: 'bbox' };
 }
 
 function polygonOf(entities, id, depth = 0) {
@@ -484,20 +539,27 @@ export function readIfc(raw, { maxElements = 200000 } = {}) {
       if (Object.keys(props).length) properties[e.id] = props;
     }
 
-    // O'lchamlar: profil > miqdor. Topilmagani null bo'lib qoladi.
+    // ISHONCH TARTIBI: profil > miqdor > chegara qutisi.
+    //
+    // Profil - modelning aniq o'lchami. Miqdor - muallif yozgani, u ham
+    // ishonchli. Chegara qutisi esa TAXMIN: zinapoyaning gabariti uning
+    // qalinligi emas. Shuning uchun bbox faqat boshqasi yo'q bo'lgandagina
+    // ishlatiladi - aks holda taxmin aniq o'lchamni siqib chiqarardi.
     let lengthM = null, widthM = null, heightM = null, source = null;
-    if (geom) {
-      // Devor uchun profil eni = qalinlik, uzunligi = a; chiqarish = balandlik
-      lengthM = geom.a != null ? geom.a * factor : null;
-      widthM = geom.b != null ? geom.b * factor : null;
-      heightM = geom.extrusion != null ? geom.extrusion * factor : null;
-      source = geom.source;
-    }
-    if (qty) {
+    const takeGeom = () => {
+      if (!geom) return;
+      if (lengthM == null && geom.a != null) { lengthM = geom.a * factor; source ??= geom.source; }
+      if (widthM == null && geom.b != null) { widthM = geom.b * factor; source ??= geom.source; }
+      if (heightM == null && geom.extrusion != null) { heightM = geom.extrusion * factor; source ??= geom.source; }
+    };
+    const takeQty = () => {
+      if (!qty) return;
       if (lengthM == null && qty.length != null) { lengthM = qty.length * factor; source ??= 'quantity'; }
       if (widthM == null && qty.width != null) { widthM = qty.width * factor; source ??= 'quantity'; }
       if (heightM == null && qty.height != null) { heightM = qty.height * factor; source ??= 'quantity'; }
-    }
+    };
+    if (geom?.source === 'profile') { takeGeom(); takeQty(); }
+    else { takeQty(); takeGeom(); }
 
     const storeyId = inStorey.get(e.id) ?? null;
     const el = {
