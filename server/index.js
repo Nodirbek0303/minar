@@ -19,6 +19,7 @@ import {
 } from './lib/extract.js';
 import { parseFloorsFromText, parseSize, describeParsed } from './lib/docparse.js';
 import { readIfc, ifcToPlan } from './lib/ifc.js';
+import * as library from './lib/library.js';
 import { detectRole, ROLES } from './lib/docrole.js';
 import { parseSpecification, compareToSpec } from './lib/specparse.js';
 import {
@@ -282,7 +283,15 @@ app.post('/api/analyze-batch', async (req, res, next) => {
       // qolardi — Revit dan chiqqan model foydasiz edi.
       if (kind === 'ifc') {
         const raw = await fs.promises.readFile(full, 'utf8');
-        const model = readIfc(raw);
+        let model;
+        try {
+          model = readIfc(raw);
+        } catch (err) {
+          // IFC o'qilmasa qolgan fayllar natijasi yo'qolmasin
+          report.push({ name: f.name, kind, role: 'bim', roleTitle: 'OpenBIM model',
+                        ok: false, info: err.message });
+          continue;
+        }
         const c = model.stats.counts;
         const parts = [
           c.wall ? `${c.wall} devor` : null,
@@ -588,6 +597,39 @@ app.put('/api/projects/:id/floors', (req, res, next) => {
     recalcProject(p);
     db.saveProject(p);
     res.json(p);
+  } catch (e) { next(e); }
+});
+
+// ---------- Haqiqiy binolar kutubxonasi ----------
+// OpenStreetMap dan olingan O'zbekiston binolari. Chizma bo'lmasa ham
+// tizimni haqiqiy bino ustida sinab ko'rish mumkin.
+app.get('/api/library', (req, res) => {
+  const num = (v) => (v === undefined ? undefined : Number(v));
+  const results = library.search({
+    kind: req.query.kind, q: req.query.q,
+    minLevels: num(req.query.minLevels), maxLevels: num(req.query.maxLevels),
+    minArea: num(req.query.minArea), maxArea: num(req.query.maxArea),
+    limit: Math.min(Number(req.query.limit) || 50, 200)
+  });
+  res.json({ results, stats: library.stats() });
+});
+
+app.get('/api/library/:id', (req, res) => {
+  const b = library.get(req.params.id);
+  if (!b) return res.status(404).json({ error: 'Bino topilmadi' });
+  res.json({ building: b });
+});
+
+// Kutubxonadagi binodan hisob plani. Devor qalinligi va qavat balandligi
+// OSM da YO'Q - ular parametr sifatida beriladi va javobda izoh qoladi.
+app.post('/api/library/:id/plan', (req, res, next) => {
+  try {
+    const b = library.get(req.params.id);
+    if (!b) return res.status(404).json({ error: 'Bino topilmadi' });
+    const thickness = Math.min(Math.max(Number(req.body?.thickness) || 0.3, 0.1), 1.5);
+    const height = Math.min(Math.max(Number(req.body?.height) || 3.0, 2.0), 8.0);
+    const plan = validatePlan(library.toPlan(b, { thickness, height }));
+    res.json({ plan });
   } catch (e) { next(e); }
 });
 

@@ -121,8 +121,30 @@ const PREFIX = {
 // millimetrda, yuzani esa kvadrat metrda yozadi. Yuzani uzunlik
 // koeffitsiyentiga ko'paytirish - klassik xato, natija million marta
 // kichrayadi. Shuning uchun har birining o'z koeffitsiyenti o'qiladi.
-function siScale(entities, unitType, power) {
+// Faylda IFCSIUNIT yozuvlari BIR NECHTA bo'ladi: loyihanikidan tashqari
+// xossalar to'plamlari o'z birligini e'lon qiladi. BasicHouse.ifc da
+// uchta LENGTHUNIT bor - MILLI, oddiy METRE va DECI. Birinchisini olsak
+// tasodifan to'g'ri chiqishi mumkin, lekin boshqa faylda 10 barobar
+// xato bo'ladi. Shuning uchun FAQAT loyihaning o'z birliklari o'qiladi.
+function projectUnits(entities) {
   for (const e of entities.values()) {
+    if (e.type !== 'IFCPROJECT') continue;
+    const assignment = entities.get(ref(e.params[8]));
+    if (!assignment || assignment.type !== 'IFCUNITASSIGNMENT') continue;
+    return list(assignment.params[0]).map(ref).filter(Boolean);
+  }
+  return null;
+}
+
+function unitEntities(entities) {
+  const ids = projectUnits(entities);
+  if (ids && ids.length) return ids.map((id) => entities.get(id)).filter(Boolean);
+  // IfcProject yo'q (bo'lak eksport) - hammasini ko'ramiz
+  return [...entities.values()];
+}
+
+function siScale(entities, unitType, power) {
+  for (const e of unitEntities(entities)) {
     if (e.type !== 'IFCSIUNIT') continue;
     if ((e.params[1] || '').replace(/[.\s]/g, '') !== unitType) continue;
     const prefix = (e.params[2] || '').replace(/[.$\s]/g, '');
@@ -141,7 +163,7 @@ export function volumeScale(entities, lengthFactor) {
 }
 
 export function lengthScale(entities) {
-  for (const e of entities.values()) {
+  for (const e of unitEntities(entities)) {
     if (e.type !== 'IFCSIUNIT') continue;
     const unitType = (e.params[1] || '').replace(/[.\s]/g, '');
     if (unitType !== 'LENGTHUNIT') continue;
@@ -149,7 +171,7 @@ export function lengthScale(entities) {
     return { factor: PREFIX[prefix] ?? 1, unit: prefix ? prefix.toLowerCase() : 'metre' };
   }
   // Konvertatsiya qilingan birlik (fut va h.k.) — koeffitsiyent o'qiladi
-  for (const e of entities.values()) {
+  for (const e of unitEntities(entities)) {
     if (e.type !== 'IFCCONVERSIONBASEDUNIT') continue;
     const name = str(e.params[2] || '').toLowerCase();
     if (name.includes('foot') || name.includes('feet')) return { factor: 0.3048, unit: 'foot' };
@@ -358,7 +380,9 @@ function boundingBoxOf(entities, repId) {
   const pts = [];
   const seen = new Set();
   const walk = (id, depth = 0) => {
-    if (!id || depth > 14 || seen.has(id) || pts.length > 40000) return;
+    // Chegara qutisi uchun bir necha ming nuqta yetarli; undan ortig'i
+    // natijani o'zgartirmaydi, lekin vaqt va xotirani yeydi.
+    if (!id || depth > 14 || seen.has(id) || pts.length > 5000) return;
     seen.add(id);
     const e = entities.get(id);
     if (!e) return;
@@ -377,6 +401,10 @@ function boundingBoxOf(entities, repId) {
     for (const p of e.params) {
       const r = ref(p);
       if (r) { walk(r, depth + 1); continue; }
+      // Ro'yxatni ochish qimmat: koordinata ro'yxatlari uzun bo'ladi va
+      // ularni bo'lakchalarga ajratish vaqtning katta qismini yeydi.
+      // Ichida `#` bo'lmasa - u sof raqamlar, havola yo'q.
+      if (typeof p !== 'string' || !p.includes('#')) continue;
       for (const item of list(p)) {
         const r2 = ref(item);
         if (r2) walk(r2, depth + 1);
@@ -425,6 +453,27 @@ export function propertyIndex(entities) {
   return index;
 }
 
+// Har miqdor O'Z BIRLIGINI e'lon qilishi mumkin: IfcQuantityArea ning
+// uchinchi maydoni - Unit. BasicHouse.ifc da loyiha m² deb e'lon qilgan,
+// lekin ayrim miqdorlar mm² da yozilgan - 5,4 m² o'rniga 5 400 000
+// chiqadi. Bu maydonni o'qimasak smeta million barobar buziladi.
+function quantityScale(entities, unitRefParam, power, fallback) {
+  const id = ref(unitRefParam);
+  if (!id) return fallback;
+  const u = entities.get(id);
+  if (!u) return fallback;
+  if (u.type === 'IFCSIUNIT') {
+    const prefix = (u.params[2] || '').replace(/[.$\s]/g, '');
+    return (PREFIX[prefix] ?? 1) ** power;
+  }
+  if (u.type === 'IFCCONVERSIONBASEDUNIT') {
+    const name = str(u.params[2] || '').toLowerCase();
+    if (name.includes('foot') || name.includes('feet')) return 0.3048 ** power;
+    if (name.includes('inch')) return 0.0254 ** power;
+  }
+  return fallback;
+}
+
 /** IfcElementQuantity — model muallifi yozgan o'lchamlar. */
 function fromQuantities(entities, elementId, index) {
   const out = {};
@@ -435,8 +484,18 @@ function fromQuantities(entities, elementId, index) {
       const q = entities.get(ref(qr));
       if (!q) continue;
       const name = str(q.params[0]).toLowerCase();
-      const value = num(q.params[3]);
+      let value = num(q.params[3]);
       if (value == null) continue;
+      // Miqdorning o'z birligi bo'lsa - darhol metr tizimiga keltiramiz.
+      // `power` turiga qarab: uzunlik 1, yuza 2, hajm 3.
+      const power = q.type === 'IFCQUANTITYAREA' ? 2
+                  : q.type === 'IFCQUANTITYVOLUME' ? 3 : 1;
+      const own = quantityScale(entities, q.params[2], power, null);
+      if (own != null) { value *= own; out.__scaled ??= new Set(); out.__scaled.add(name); }
+      // Haqiqiy modellarda buzuq qiymat uchraydi: BasicHouse.ifc da
+      // bitta devorning yuzasi 57 282 798 m² deb yozilgan. Uni qabul
+      // qilsak butun smeta ma'nosini yo'qotadi.
+      if (!Number.isFinite(value) || value < 0 || value > 1e7) continue;
       // Nomlar eksport qiluvchi dasturga qarab farq qiladi: Revit
       // "NetSideArea", ArchiCAD "Area", Tekla "GrossArea" deb yozadi.
       // Shuning uchun kalit so'z bo'yicha qidiriladi, aniq nom bo'yicha emas.
@@ -444,9 +503,19 @@ function fromQuantities(entities, elementId, index) {
       else if (/width|thickness/.test(name)) out.width ??= value;
       else if (/height|depth/.test(name)) out.height ??= value;
       else if (/volume/.test(name)) out.volume ??= value;
+      // YUZA nomi muhim: devor qolipi uchun kerakli qiymat "SideArea"
+      // (devor YUZASI), "FootprintArea" esa uning PLANDAGI izi. Ikkinchisi
+      // birinchisidan bir necha barobar kichik va u tanlansa hisob
+      // jimgina kamayib ketadi.
+      else if (/sidearea/.test(name)) out.sideArea ??= value;
+      else if (/footprint/.test(name)) out.footprintArea ??= value;
       else if (/area/.test(name)) out.area ??= value;
     }
   }
+  // Ustuvorlik: devor yuzasi > umumiy yuza > plandagi iz
+  out.area = out.sideArea ?? out.area ?? out.footprintArea;
+  delete out.sideArea; delete out.footprintArea;
+  if (out.area === undefined) delete out.area;
   return Object.keys(out).length ? { ...out, source: 'quantity' } : null;
 }
 
@@ -495,15 +564,48 @@ const KINDS = {
   IFCMEMBER: 'member', IFCFOOTING: 'footing', IFCSTAIR: 'stair'
 };
 
+// Yuzani geometriya bilan solishtirib tekshiradi.
+// Qaytadi: m² dagi qiymat yoki null.
+export function saneArea(rawArea, aFactor, lengthM, heightM) {
+  if (rawArea == null) return null;
+  let area = rawArea * aFactor;
+  if (!(area > 0)) return null;
+  const expected = (lengthM && heightM) ? lengthM * heightM : null;
+  if (!expected) {
+    // Solishtirish uchun geometriya yo'q - faqat aql bovar qiladigan
+    // oraliqni tekshiramiz (bitta devor yuzasi 100 000 m² bo'lmaydi)
+    return area <= 1e5 ? +area.toFixed(3) : null;
+  }
+  const ratio = area / expected;
+  if (ratio >= 0.3 && ratio <= 3) return +area.toFixed(3);
+  // Birlik e'lon qilinmagan mm² - million barobar katta chiqadi
+  if (ratio >= 3e5 && ratio <= 3e6) return +(area / 1e6).toFixed(3);
+  return null;
+}
+
 // ---------- 7. Asosiy funksiya ----------
 
 /**
  * IFC matnidan model chiqaradi.
  * Qaytadi: { schema, unit, storeys[], elements[], stats, problems[] }
  */
-export function readIfc(raw, { maxElements = 200000 } = {}) {
+// Xotira chegarasi. 51 MB li IFC dan 1 026 311 yozuv chiqadi va ~370 MB
+// xotira yeydi. Serverda 2 GB RAM bor va unda boshqa foydalanuvchilar
+// ham ishlaydi: chegarasiz katta fayl xizmatni OOM bilan o'ldiradi va
+// dastur HAMMA uchun to'xtaydi. Shuning uchun aniq chegara qo'yiladi -
+// tushunarli xato yiqilgan xizmatdan yaxshi.
+export const MAX_BYTES = 40 * 1024 * 1024;
+
+export function readIfc(raw, { maxElements = 200000, maxBytes = MAX_BYTES } = {}) {
   if (typeof raw !== 'string' || !/ISO-10303-21/i.test(raw.slice(0, 4000))) {
     throw new Error('IFC STEP sarlavhasi topilmadi (ISO-10303-21)');
+  }
+  if (raw.length > maxBytes) {
+    throw new Error(
+      `IFC juda katta: ${Math.round(raw.length / 1048576)} MB `
+      + `(chegara ${Math.round(maxBytes / 1048576)} MB). `
+      + "Bitta qavatni yoki bitta bo'limni alohida eksport qiling."
+    );
   }
   const schema = /FILE_SCHEMA\s*\(\s*\(\s*'([^']+)'/i.exec(raw)?.[1] || 'IFC';
   const entities = parseStep(raw);
@@ -517,6 +619,7 @@ export function readIfc(raw, { maxElements = 200000 } = {}) {
   const byId = new Map(storeys.map((s) => [s.id, s]));
 
   const propIndex = propertyIndex(entities);
+  const voids = voidsIndex(entities);
   const elements = [];
   const properties = {};
   const problems = [];
@@ -561,6 +664,17 @@ export function readIfc(raw, { maxElements = 200000 } = {}) {
     if (geom?.source === 'profile') { takeGeom(); takeQty(); }
     else { takeQty(); takeGeom(); }
 
+    // Eshik va derazada IFC ning O'ZIDA maxsus maydon bor:
+    // OverallHeight (8) va OverallWidth (9). Profil bilan chalkashmaydi -
+    // proyomning profili «balandlik x eni», chiqarishi esa devor
+    // qalinligi bo'ladi va uni devordagidek talqin qilsak o'lcham
+    // ag'darilib ketadi.
+    if (kind === 'door' || kind === 'window') {
+      const oh = num(e.params[8]), ow = num(e.params[9]);
+      if (ow != null) { lengthM = ow * factor; source = 'attribute'; }
+      if (oh != null) { heightM = oh * factor; source = 'attribute'; }
+    }
+
     const storeyId = inStorey.get(e.id) ?? null;
     const el = {
       id: e.id,
@@ -588,7 +702,13 @@ export function readIfc(raw, { maxElements = 200000 } = {}) {
             };
           })()
         : null,
-      areaM2: qty?.area != null ? +(qty.area * aFactor).toFixed(3) : null,
+      // Yuza GEOMETRIYA bilan tekshiriladi. Haqiqiy modellarda buzuq
+      // miqdor uchraydi: BasicHouse.ifc da bitta devorning yuzasi
+      // 57 282 798 m² deb yozilgan, yonida esa to'g'ri qiymat 48,02.
+      // Ba'zilari esa birlik e'lon qilmasdan mm² da yozilgan.
+      // Shuning uchun L x H bilan solishtiriladi: mos kelmasa yuza
+      // OLINMAYDI. Yo'q raqam noto'g'ri raqamdan yaxshi.
+      areaM2: saneArea(qty?.area, aFactor, lengthM, heightM),
       volumeM3: qty?.volume != null ? +(qty.volume * vFactor).toFixed(3) : null,
       source                     // profile | quantity | bbox | null
     };
@@ -614,6 +734,10 @@ export function readIfc(raw, { maxElements = 200000 } = {}) {
     storeys: storeys.map((s) => ({ ...s, count: s.elements.length })),
     elements,
     properties,
+    voids: {
+      byWall: Object.fromEntries(voids.byWall),
+      fill: Object.fromEntries(voids.fill)
+    },
     stats: { total: elements.length, measured, counts, entities: entities.size },
     problems
   };
@@ -646,6 +770,59 @@ export function propertiesOf(entities, elementId, index) {
     }
   }
   return out;
+}
+
+// ---------- 8b. Proyomlar: eshik va deraza ----------
+//
+// IFC da proyom devorga IfcRelVoidsElement bilan bog'lanadi, eshik yoki
+// deraza esa proyomga IfcRelFillsElement bilan. Bu bog'lanishlarsiz
+// devor yuzasidan eshik-deraza chegirilmaydi va QOLIP ORTIQCHA chiqadi -
+// 3 x 2,1 m li eshik bitta devorda 6 m² ortiqcha qolip degani.
+
+export function voidsIndex(entities) {
+  const byWall = new Map();     // devor id -> [proyom id]
+  const fill = new Map();       // proyom id -> to'ldiruvchi element id
+  for (const e of entities.values()) {
+    if (e.type === 'IFCRELVOIDSELEMENT') {
+      const wall = ref(e.params[4]);
+      const opening = ref(e.params[5]);
+      if (!wall || !opening) continue;
+      if (!byWall.has(wall)) byWall.set(wall, []);
+      byWall.get(wall).push(opening);
+    } else if (e.type === 'IFCRELFILLSELEMENT') {
+      const opening = ref(e.params[4]);
+      const filler = ref(e.params[5]);
+      if (opening && filler) fill.set(opening, filler);
+    }
+  }
+  return { byWall, fill };
+}
+
+/**
+ * Proyomni devor bo'ylab joylashtiradi.
+ * `offset` - devor boshidan (a nuqtasidan) masofa, `sill` - poldan balandlik.
+ */
+export function placeOpening(wall, opening) {
+  if (!wall.ends || !opening.lengthM) return null;
+  const [ax, ay] = wall.ends.a;
+  const [bx, by] = wall.ends.b;
+  const dx = bx - ax, dy = by - ay;
+  const len = Math.hypot(dx, dy);
+  if (len < 1e-6) return null;
+  // Proyom markazini devor o'qiga proyeksiya qilamiz
+  const t = ((opening.x - ax) * dx + (opening.y - ay) * dy) / (len * len);
+  const centre = t * len;
+  const width = opening.lengthM;
+  const offset = centre - width / 2;
+  // Devordan tashqarida qolgan proyom - model xatosi, olinmaydi
+  if (offset < -0.5 || offset > len + 0.5) return null;
+  const sill = Math.max(0, +(opening.z - wall.z).toFixed(3));
+  return {
+    offset: +Math.max(0, offset).toFixed(3),
+    width: +width.toFixed(3),
+    height: opening.heightM ? +opening.heightM.toFixed(3) : null,
+    sill
+  };
 }
 
 // ---------- 9. IFC -> hisob plani ----------
@@ -712,6 +889,33 @@ export function ifcToPlan(model, { name = 'IFC model' } = {}) {
     .filter((e) => e.kind === 'column' && e.lengthM && e.widthM)
     .map((e) => ({ id: `c${e.id}`, x: e.x, y: e.y, a: e.lengthM, b: e.widthM }));
 
+  // --- Proyomlar: devor yuzasidan chegiriladi ---
+  // Bularsiz qolip ortiqcha chiqadi: 3 x 2,1 m li eshik bitta devorda
+  // 6 m² ortiqcha panel degani, ikki yuzada esa 12 m².
+  const openings = [];
+  const byId = new Map(model.elements.map((e) => [e.id, e]));
+  const wallById = new Map(walls.map((w) => [w.ifcId, w]));
+  for (const [wallId, list] of Object.entries(model.voids?.byWall || {})) {
+    const wallEl = byId.get(+wallId);
+    const planWall = wallById.get(+wallId);
+    if (!wallEl || !planWall) continue;
+    for (const openingId of list) {
+      const op = byId.get(openingId);
+      if (!op) continue;
+      // O'lcham manbai: eshik/derazaning O'ZI eng ishonchli (IFC da
+      // OverallWidth/OverallHeight aynan shu uchun). Proyomning profili
+      // «balandlik x eni» bo'lgani uchun undan olsak o'lcham ag'dariladi.
+      const filler = byId.get(model.voids.fill[openingId]);
+      const size = (filler && filler.lengthM && filler.heightM) ? filler : op;
+      const placed = placeOpening(wallEl, { ...op, lengthM: size.lengthM, heightM: size.heightM });
+      if (!placed || !placed.height) { skipped.opening = (skipped.opening || 0) + 1; continue; }
+      const type = filler?.kind === 'door' ? 'door'
+                 : filler?.kind === 'window' ? 'window'
+                 : placed.sill < 0.3 ? 'door' : 'window';
+      openings.push({ id: `o${openingId}`, wallId: planWall.id, type, ...placed });
+    }
+  }
+
   return {
     meta: {
       name,
@@ -722,13 +926,14 @@ export function ifcToPlan(model, { name = 'IFC model' } = {}) {
       analysis: {
         walls: walls.length,
         columns: columns.length,
+        openings: openings.length,
         storeys: floors.length,
         skipped
       }
     },
     floors,
     walls,
-    openings: [],
+    openings,
     rooms: [],
     columns
   };

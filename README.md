@@ -76,7 +76,47 @@ Har o'lcham uchun **manbasi** saqlanadi (`profile` / `quantity` / `bbox`).
 Manbasi topilmagan o'lcham `null` bo'lib qoladi va hisobga kirmaydi —
 nol uzunlikli devor smetani jimgina buzadi, uni hech kim sezmaydi.
 
+Proyomlar (eshik/deraza) `IfcRelVoidsElement` orqali devorga bog'lanadi va
+yuzadan **chegiriladi**. Haqiqiy modellarda o'lchangan ta'sir: qolip yuzasi
+5,5% dan 15,7% gacha kamayadi, panel soni esa ba'zan **oshadi** — proyom
+devorni bo'laklarga bo'lib mayda panel talab qiladi.
+
 Geometriya manbalari tartibi: **DXF → IFC → AI rasm tahlili**.
+
+**Xotira chegarasi:** 51 MB li IFC dan 1 026 311 yozuv chiqadi va ~370 MB
+xotira yeydi. Serverda 2 GB RAM bor, shuning uchun 40 MB dan katta fayl
+tushunarli xato bilan rad etiladi — yiqilgan xizmat hamma uchun to'xtaydi.
+
+### Aniqlik qanday o'lchanadi
+
+```bash
+node tools/aniqlik.mjs <IFC papkasi>
+```
+
+O'qilgan natija modelning **o'z miqdorlari** bilan solishtiriladi
+(`IfcQuantityArea`) — AI ham, taxmin ham aralashmaydi. 2026-09-05 holati,
+bim-whale to'plami: **440 devor, 357 tasi 5% aniqlik ichida (81%)**.
+
+Ba'zi eksportlar `NetSideArea` ga devorning **ikkala yuzasini** yozadi
+(LargeBuilding, TallBuilding), ba'zilari bittasini (AdvancedProject).
+O'lchov buni aniqlaydi va **aytadi** — jimgina ikkiga bo'lish xato bo'lardi.
+
+### Haqiqiy binolar kutubxonasi
+
+OpenStreetMap dan O'zbekiston binolari (ODbL). 1 633 924 konturdan qolip
+hisobi uchun ma'nolilari saralangan: 2+ qavatli, 200 m² dan katta —
+**41 755 bino**, 8,1 MB.
+
+```
+GET  /api/library?minLevels=5&minArea=2000    qidiruv
+GET  /api/library/:id                          bitta bino
+POST /api/library/:id/plan                     hisob plani
+```
+
+DIQQAT: OSM ma'lumoti mukammal emas — qavat soni 18% da, balandlik atigi
+0,6% da ko'rsatilgan, ba'zi yozuvlar ochiq xato (100 000 m² li «2 qavatli
+uy»). Shuning uchun bu kutubxona **manba emas, namuna**: devor qalinligi va
+qavat balandligi OSM da yo'q va parametr sifatida beriladi.
 
 Bir so'rovda **20 tagacha** fayl, har biri 30 MB gacha. Geometriya manbai sifatida DXF ustun
 turadi; DXF bo'lmasa AI rasm tahlilidan foydalaniladi. Qavatlar avval AI dan, u bo'lmasa

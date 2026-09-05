@@ -344,3 +344,102 @@ ENDSEC;`;
   assert.equal(el.widthM, 0.3);
   assert.equal(el.source, 'profile');
 });
+
+// --- Proyomlar: eshik va deraza ---------------------------------------
+// Bularsiz qolip ORTIQCHA chiqadi. Haqiqiy modellarda o'lchangan farq:
+// qolip yuzasi 5,5% dan 15,7% gacha kamayadi.
+
+const WALL_WITH_OPENING = `ISO-10303-21;
+DATA;
+#11=IFCSIUNIT(*,.LENGTHUNIT.,$,.METRE.);
+#1=IFCCARTESIANPOINT((0.,0.));
+#2=IFCAXIS2PLACEMENT2D(#1,$);
+#3=IFCRECTANGLEPROFILEDEF(.AREA.,'W',#2,6.,0.3);
+#4=IFCCARTESIANPOINT((3.,0.,0.));
+#5=IFCAXIS2PLACEMENT3D(#4,$,$);
+#6=IFCDIRECTION((0.,0.,1.));
+#7=IFCEXTRUDEDAREASOLID(#3,#5,#6,3.);
+#8=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#7));
+#9=IFCPRODUCTDEFINITIONSHAPE($,$,(#8));
+#12=IFCCARTESIANPOINT((0.,0.,0.));
+#13=IFCAXIS2PLACEMENT3D(#12,$,$);
+#14=IFCLOCALPLACEMENT($,#13);
+#15=IFCCARTESIANPOINT((3.,0.,0.));
+#16=IFCAXIS2PLACEMENT3D(#15,$,$);
+#17=IFCLOCALPLACEMENT(#14,#16);
+#20=IFCWALL('gw',$,'Devor',$,$,#17,#9,$,$);
+#30=IFCCARTESIANPOINT((2.,0.,0.));
+#31=IFCAXIS2PLACEMENT3D(#30,$,$);
+#32=IFCLOCALPLACEMENT(#14,#31);
+#33=IFCOPENINGELEMENT('go',$,'Proyom',$,$,#32,$,$,$);
+#34=IFCRELVOIDSELEMENT('gv',$,$,$,#20,#33);
+#40=IFCCARTESIANPOINT((2.,0.,0.));
+#41=IFCAXIS2PLACEMENT3D(#40,$,$);
+#42=IFCLOCALPLACEMENT(#14,#41);
+#43=IFCDOOR('gd',$,'Eshik',$,$,#42,$,$,2.1,0.9);
+#44=IFCRELFILLSELEMENT('gf',$,$,$,#33,#43);
+#50=IFCBUILDINGSTOREY('gs',$,'1-qavat',$,$,#14,$,$,.ELEMENT.,0.);
+#51=IFCRELCONTAINEDINSPATIALSTRUCTURE('gr',$,$,$,(#20,#33,#43),#50);
+ENDSEC;`;
+
+test('eshik o\'z o\'lchamini IFC maydonidan beradi', () => {
+  // IfcDoor da OverallHeight (8) va OverallWidth (9) maxsus maydon.
+  const d = readIfc(WALL_WITH_OPENING).elements.find((e) => e.kind === 'door');
+  assert.equal(d.lengthM, 0.9);
+  assert.equal(d.heightM, 2.1);
+  assert.equal(d.source, 'attribute');
+});
+
+test('proyom devorga bog\'lanadi va joyi topiladi', () => {
+  const plan = ifcToPlan(readIfc(WALL_WITH_OPENING));
+  assert.equal(plan.openings.length, 1);
+  const o = plan.openings[0];
+  assert.equal(o.wallId, plan.walls[0].id);
+  assert.equal(o.type, 'door');
+  assert.equal(o.width, 0.9);
+  assert.equal(o.height, 2.1);
+});
+
+test('proyom o\'lchami eshikdan olinadi, proyom profilidan emas', () => {
+  // Proyomning profili «balandlik x eni» bo'lgani uchun uni devordagidek
+  // talqin qilsak o'lcham AG'DARILIB ketadi: 2,1 m enli eshik chiqadi.
+  const o = ifcToPlan(readIfc(WALL_WITH_OPENING)).openings[0];
+  assert.ok(o.width < o.height, `eni ${o.width} balandlikdan ${o.height} katta - ag'darilgan`);
+});
+
+test('devordan tashqaridagi proyom olinmaydi', () => {
+  // Model xatosi: proyom devor chegarasidan uzoqda. Uni qo'shsak
+  // devor yuzasidan mavjud bo'lmagan teshik chegiriladi.
+  const raw = WALL_WITH_OPENING.replace('#30=IFCCARTESIANPOINT((2.,0.,0.));',
+                                        '#30=IFCCARTESIANPOINT((90.,0.,0.));');
+  const plan = ifcToPlan(readIfc(raw));
+  assert.equal(plan.openings.length, 0);
+  // Jimgina tashlanmaydi - nechtasi o'tmagani hisobotda ko'rinadi
+  assert.equal(plan.meta.analysis.skipped.opening, 1);
+});
+
+test('to\'ldiruvchisiz proyom poldan balandligiga qarab ajratiladi', () => {
+  // Eshik polda turadi, deraza yuqorida - IfcDoor/IfcWindow bo'lmasa
+  // shu farqdan foydalaniladi.
+  // Proyomga o'z geometriyasi beriladi: 1,0 m enli, 2,0 m balandlikda
+  const raw = WALL_WITH_OPENING
+    .replace("#43=IFCDOOR('gd',$,'Eshik',$,$,#42,$,$,2.1,0.9);", '')
+    .replace("#44=IFCRELFILLSELEMENT('gf',$,$,$,#33,#43);", '')
+    .replace("#33=IFCOPENINGELEMENT('go',$,'Proyom',$,$,#32,$,$,$);",
+      "#60=IFCRECTANGLEPROFILEDEF(.AREA.,'O',#2,1.,0.4);\n" +
+      "#61=IFCEXTRUDEDAREASOLID(#60,#5,#6,2.);\n" +
+      "#62=IFCSHAPEREPRESENTATION($,'Body','SweptSolid',(#61));\n" +
+      "#63=IFCPRODUCTDEFINITIONSHAPE($,$,(#62));\n" +
+      "#33=IFCOPENINGELEMENT('go',$,'Proyom',$,$,#32,#63,$,$);");
+  const plan = ifcToPlan(readIfc(raw));
+  assert.equal(plan.openings.length, 1);
+  assert.equal(plan.openings[0].type, 'door');   // sill = 0, ya'ni polda
+});
+
+test('juda katta fayl aniq xato beradi, xizmatni yiqitmaydi', () => {
+  // 51 MB li IFC dan 1 026 311 yozuv chiqadi va ~370 MB xotira yeydi.
+  // Serverda 2 GB RAM: chegarasiz katta fayl xizmatni OOM bilan
+  // o'ldiradi va dastur HAMMA uchun to'xtaydi.
+  const raw = 'ISO-10303-21;\nDATA;\n' + 'x'.repeat(2000);
+  assert.throws(() => readIfc(raw, { maxBytes: 500 }), /juda katta/);
+});
