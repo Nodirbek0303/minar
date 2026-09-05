@@ -102,3 +102,48 @@ test('bo\'sh plan yiqilmaydi', () => {
   assert.equal(c.recallPct, 0);
   assert.equal(c.matched, 0);
 });
+
+// --- AI sozlamasi -----------------------------------------------------
+// Serverda Anthropic kaliti (sk-ant-...) OpenAI manziliga yuborilib
+// turgan edi: har chaqiruv 401 qaytarardi, ekranda esa «AI: ulangan».
+// Noto'g'ri sozlama JIM ishlamay turgandan ko'ra to'g'rilangani yaxshi.
+
+import { pickBaseUrl, aiMisconfig } from '../server/lib/ai.js';
+
+test('anthropic kaliti openai manziliga ketmaydi', () => {
+  assert.equal(pickBaseUrl('https://api.openai.com/v1', 'anthropic'),
+               'https://api.anthropic.com/v1');
+});
+
+test('openai kaliti anthropic manziliga ketmaydi', () => {
+  assert.equal(pickBaseUrl('https://api.anthropic.com/v1', 'openai'),
+               'https://api.openai.com/v1');
+});
+
+test('o\'z serveringiz manzili tegilmaydi', () => {
+  // Proxy yoki mahalliy model ishlatilsa - sozlama hurmat qilinadi
+  assert.equal(pickBaseUrl('https://ai.minar.uz/v1', 'openai'), 'https://ai.minar.uz/v1');
+});
+
+test('manzil berilmasa provayderniki olinadi', () => {
+  assert.equal(pickBaseUrl('', 'anthropic'), 'https://api.anthropic.com/v1');
+  assert.equal(pickBaseUrl('', 'openai'), 'https://api.openai.com/v1');
+});
+
+test('ziddiyat sababi bilan aytiladi', () => {
+  const old = { k: process.env.AI_API_KEY, u: process.env.AI_BASE_URL };
+  process.env.AI_API_KEY = 'sk-ant-xxx';
+  process.env.AI_BASE_URL = 'https://api.openai.com/v1';
+  assert.match(aiMisconfig(), /Anthropic kaliti/);
+  process.env.AI_API_KEY = old.k ?? '';
+  process.env.AI_BASE_URL = old.u ?? '';
+});
+
+test('to\'g\'ri sozlamada ogohlantirish yo\'q', () => {
+  const old = { k: process.env.AI_API_KEY, u: process.env.AI_BASE_URL };
+  process.env.AI_API_KEY = 'sk-ant-xxx';
+  process.env.AI_BASE_URL = 'https://api.anthropic.com/v1';
+  assert.equal(aiMisconfig(), null);
+  process.env.AI_API_KEY = old.k ?? '';
+  process.env.AI_BASE_URL = old.u ?? '';
+});

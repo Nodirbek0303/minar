@@ -9,6 +9,36 @@ import { DEFAULT_MODEL as ANTHROPIC_DEFAULT_MODEL } from './anthropic.js';
 // Provayder kalitning ko'rinishidan aniqlanadi (yoki AI_PROVIDER bilan majburlanadi):
 //  · sk-ant-... → Anthropic (Claude), rasmiy SDK orqali
 //  · boshqasi   → OpenAI-mos API (/chat/completions)
+const OPENAI_DEFAULT_URL = 'https://api.openai.com/v1';
+const ANTHROPIC_URL = 'https://api.anthropic.com/v1';
+
+export function pickBaseUrl(configured, provider) {
+  const url = (configured || '').replace(/\/$/, '');
+  const wantsAnthropic = provider === 'anthropic';
+  const looksOpenai = /api\.openai\.com/i.test(url);
+  const looksAnthropic = /api\.anthropic\.com/i.test(url);
+  if (!url) return wantsAnthropic ? ANTHROPIC_URL : OPENAI_DEFAULT_URL;
+  if (wantsAnthropic && looksOpenai) return ANTHROPIC_URL;
+  if (!wantsAnthropic && looksAnthropic) return OPENAI_DEFAULT_URL;
+  return url;
+}
+
+/** Sozlama o'zaro ziddiyatli bo'lsa — sababi bilan qaytaradi. */
+export function aiMisconfig() {
+  const key = process.env.AI_API_KEY || '';
+  if (!key) return null;
+  const url = (process.env.AI_BASE_URL || '').replace(/\/$/, '');
+  if (key.startsWith('sk-ant-') && /api\.openai\.com/i.test(url)) {
+    return 'AI_API_KEY Anthropic kaliti, AI_BASE_URL esa OpenAI manzili — '
+         + 'manzil Anthropic ga o\'zgartirildi';
+  }
+  if (!key.startsWith('sk-ant-') && /api\.anthropic\.com/i.test(url)) {
+    return 'AI_API_KEY OpenAI kaliti, AI_BASE_URL esa Anthropic manzili — '
+         + 'manzil OpenAI ga o\'zgartirildi';
+  }
+  return null;
+}
+
 export function aiConfig() {
   const key = process.env.AI_API_KEY || '';
   const forced = (process.env.AI_PROVIDER || '').toLowerCase();
@@ -18,7 +48,13 @@ export function aiConfig() {
   return {
     key,
     provider,
-    baseUrl: (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, ''),
+    // Manzil provayderga MOS bo'lishi shart. Serverda Anthropic kaliti
+    // (sk-ant-...) OpenAI manziliga yuborilib turgan edi va har chaqiruv
+    // 401 qaytarardi - dastur esa «AI: ulangan» deb ko'rsatardi.
+    // Agar sozlamadagi manzil provayderga to'g'ri kelmasa, e'tiborsiz
+    // qoldiriladi: noto'g'ri sozlama jim ishlamay turgandan ko'ra
+    // to'g'rilangani yaxshi.
+    baseUrl: pickBaseUrl(process.env.AI_BASE_URL, provider),
     model: process.env.AI_MODEL || (provider === 'anthropic' ? ANTHROPIC_DEFAULT_MODEL : 'gpt-4o-mini')
   };
 }
@@ -27,9 +63,34 @@ export const aiProvider = () => aiConfig().provider;
 // Anthropic PDF ni rasmga o'girmasdan, hujjat sifatida to'g'ridan-to'g'ri o'qiydi
 export const supportsNativePdf = () => aiEnabled() && aiConfig().provider === 'anthropic';
 
+// `data:image/png;base64,...` -> Anthropic SDK kutadigan ko'rinish
+function dataUrlToSource(url) {
+  const m = /^data:([^;]+);base64,(.*)$/.exec(url);
+  if (m) return { type: 'base64', media_type: m[1], data: m[2] };
+  return { type: 'base64', media_type: 'image/png', data: url };
+}
+
 async function chat(messages, { json = false, imageBase64 = null, images = null } = {}) {
-  const { key, baseUrl, model } = aiConfig();
+  const { key, baseUrl, model, provider } = aiConfig();
   const imgs = images?.length ? images : (imageBase64 ? [imageBase64] : []);
+
+  // Anthropic kaliti bilan OpenAI ning /chat/completions ga borish
+  // mumkin emas. Ilgari shunday bo'lardi va rasm tahlili UMUMAN
+  // ishlamasdi - xato esa faqat foydalanuvchiga chiqardi.
+  if (provider === 'anthropic') {
+    const { chat: anthropicChat } = await import('./anthropic.js');
+    const text = messages[messages.length - 1].content;
+    const content = imgs.length
+      ? [...imgs.map((url) => ({
+           type: 'image',
+           source: dataUrlToSource(url)
+         })), { type: 'text', text }]
+      : text;
+    return anthropicChat(key, model, {
+      system: json ? 'Faqat JSON qaytar, boshqa matn yozma.' : undefined,
+      messages: [{ role: 'user', content }]
+    });
+  }
   const content = imgs.length
     ? [{ type: 'text', text: messages[messages.length - 1].content },
        ...imgs.map((url) => ({ type: 'image_url', image_url: { url, detail: 'high' } }))]

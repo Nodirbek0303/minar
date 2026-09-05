@@ -13,7 +13,7 @@ import {
   buildFloors, applyFormworkScheme, FORMWORK_SCHEMES,
   computeVariants, VARIANTS, DEFAULT_VARIANT
 } from './lib/calc.js';
-import { analyzeImage, analyzeDocuments, chatAssistant, aiEnabled, aiProvider, supportsNativePdf } from './lib/ai.js';
+import { analyzeImage, analyzeDocuments, chatAssistant, aiEnabled, aiProvider, supportsNativePdf, aiMisconfig } from './lib/ai.js';
 import {
   SUPPORTED_EXT, fileKind, textOf, imageDataUri, pdfToImages, cleanupDir, popplerAvailable
 } from './lib/extract.js';
@@ -636,7 +636,12 @@ app.post('/api/library/:id/plan', (req, res, next) => {
 app.get('/api/sample-plan', (req, res) => res.json({ plan: samplePlan() }));
 app.get('/api/rates-defaults', (req, res) => res.json({ rates: DEFAULT_RATES }));
 app.get('/api/variants', (req, res) => res.json({ variants: VARIANTS, default: DEFAULT_VARIANT }));
-app.get('/api/ai-status', (req, res) => res.json({ enabled: aiEnabled() }));
+// `enabled` faqat «kalit bor» degani. Sozlama ziddiyatli bo'lsa buni
+// AYTAMIZ: ilgari Anthropic kaliti OpenAI manziliga yuborilib, har
+// chaqiruv 401 qaytarardi, ekranda esa «AI: ulangan» turardi.
+app.get('/api/ai-status', (req, res) => res.json({
+  enabled: aiEnabled(), provider: aiProvider(), warning: aiMisconfig()
+}));
 
 // ---------- AI chat ----------
 app.post('/api/ai/chat', async (req, res, next) => {
@@ -740,7 +745,9 @@ migrateProjects();
 
 export const server = process.env.NODE_ENV === 'test' ? null : app.listen(PORT, HOST, () => {
   console.log(`ArxAI server: http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
-  console.log(`  AI: ${aiEnabled() ? 'ULANGAN' : 'demo rejim'}`);
+  console.log(`  AI: ${aiEnabled() ? `kalit bor (${aiProvider()})` : 'demo rejim'}`);
+  const warn = aiMisconfig();
+  if (warn) console.log(`  DIQQAT: ${warn}`);
   console.log(`  Kirish: ${authEnabled() ? 'parol bilan himoyalangan' : 'PAROLSIZ — faqat 127.0.0.1 (tarmoqqa ochish uchun .env da APP_PASSWORD bering)'}`);
 });
 
