@@ -443,9 +443,26 @@ app.post('/api/analyze-batch', async (req, res, next) => {
     const detected = ai?.floors?.length ? ai.floors : parsedFloors;
     const floorSource = ai?.floors?.length ? 'ai' : (parsedFloors.length ? 'matn' : 'standart');
 
-    plan.floors = buildFloors(detected, {
-      scheme: FORMWORK_SCHEMES[scheme] ? scheme : 'podval-1'
-    });
+    const useScheme = FORMWORK_SCHEMES[scheme] ? scheme : 'podval-1';
+    // IFC MODELI qavatlarni O'ZI aytadi: nomi, balandligi, yer ostimi va
+    // eng muhimi - HAR QAVATNING O'Z DEVORLARI. Ularni AI yoki matn
+    // evristikasi bilan almashtirish modeldan kelgan aniq ma'lumotni
+    // taxminga almashtirish demak. Shuning uchun IFC qavatlari saqlanadi,
+    // ularga faqat qolip sxemasi qo'llanadi.
+    const fromIfc = plan.meta?.source === 'ifc' && plan.floors?.length;
+    plan.floors = fromIfc
+      ? applyFormworkScheme(
+          plan.floors.map((f, i) => ({
+            id: f.id || 'fl' + i,
+            name: f.name,
+            height: Math.min(6, Math.max(0.5, Number(f.height) || 3)),
+            underground: !!f.underground,
+            facade: true,
+            formwork: { type: 'msho', color: 'RAL3020' },
+            ...(f.walls?.length ? { walls: f.walls } : {})
+          })),
+          useScheme)
+      : buildFloors(detected, { scheme: useScheme });
     if (ai?.name) plan.meta.name = ai.name;
 
     res.json({

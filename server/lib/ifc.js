@@ -960,7 +960,12 @@ export function ifcToPlan(model, { name = 'IFC model' } = {}) {
   // 6 m² ortiqcha panel degani, ikki yuzada esa 12 m².
   const openings = [];
   const byId = new Map(model.elements.map((e) => [e.id, e]));
-  const wallById = new Map(walls.map((w) => [w.ifcId, w]));
+  // Proyomlar HAMMA qavat devorlariga biriktiriladi, faqat asosiy
+  // sathnikiga emas. Aks holda yuqori qavatlarda eshik-deraza
+  // chegirilmaydi va o'sha qavatlar uchun qolip ortiqcha chiqadi.
+  const wallById = new Map();
+  for (const w of walls) wallById.set(w.ifcId, w);
+  for (const f of floors) for (const w of f.walls || []) wallById.set(w.ifcId, w);
   for (const [wallId, list] of Object.entries(model.voids?.byWall || {})) {
     const wallEl = byId.get(+wallId);
     const planWall = wallById.get(+wallId);

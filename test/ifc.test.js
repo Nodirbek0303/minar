@@ -536,3 +536,34 @@ test('o\'q chizig\'i yo\'q bo\'lsa markazdan chiqariladi', () => {
   assert.equal(w.ends.from, 'placement');
   assert.ok(w.ends.a && w.ends.b);
 });
+
+test('IFC qavatlari AI taxminiga almashtirilmaydi', () => {
+  // IFC model qavatlarni O'ZI aytadi: nomi, balandligi, yer ostimi va
+  // har qavatning devorlari. Ularni evristika bilan almashtirish aniq
+  // ma'lumotni taxminga almashtirish demak.
+  const plan = ifcToPlan(readIfc(TWO_STOREYS));
+  assert.deepEqual(plan.floors.map((f) => f.name), ['Podval', '1-qavat']);
+  assert.equal(plan.floors[0].underground, true);
+  assert.equal(plan.floors[0].walls.length, 1);
+  assert.equal(plan.floors[1].walls.length, 3);
+});
+
+test('proyomlar hamma qavat devorlariga biriktiriladi', () => {
+  // Faqat asosiy sathga biriktirilsa, yuqori qavatlarda eshik-deraza
+  // chegirilmaydi va o'sha qavatlar uchun qolip ortiqcha chiqadi.
+  const raw = TWO_STOREYS
+    .replace("#61=IFCRELCONTAINEDINSPATIALSTRUCTURE('r1',$,$,$,(#40,#41,#42),#51);",
+      "#70=IFCCARTESIANPOINT((2.,0.,0.));\n" +
+      "#71=IFCAXIS2PLACEMENT3D(#70,$,$);\n" +
+      "#72=IFCLOCALPLACEMENT(#14,#71);\n" +
+      "#73=IFCOPENINGELEMENT('go',$,'Proyom',$,$,#72,$,$,$);\n" +
+      "#74=IFCRELVOIDSELEMENT('gv',$,$,$,#40,#73);\n" +
+      "#75=IFCDOOR('gd',$,'Eshik',$,$,#72,$,$,2.1,0.9);\n" +
+      "#76=IFCRELFILLSELEMENT('gf',$,$,$,#73,#75);\n" +
+      "#61=IFCRELCONTAINEDINSPATIALSTRUCTURE('r1',$,$,$,(#40,#41,#42,#73,#75),#51);");
+  const plan = ifcToPlan(readIfc(raw));
+  // Proyom 1-qavat devorida (#40), asosiy sath esa Podval
+  assert.equal(plan.meta.level, 'Podval');
+  assert.equal(plan.openings.length, 1);
+  assert.equal(plan.openings[0].wallId, 'w40');
+});
