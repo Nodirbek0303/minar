@@ -7,8 +7,12 @@ import Viewer5D from '../components/Viewer5D.jsx';
 import FacadeDetail from '../components/FacadeDetail.jsx';
 import ChatPanel from '../components/ChatPanel.jsx';
 import FloorsPanel from '../components/FloorsPanel.jsx';
+import BimCoordination from '../components/BimCoordination.jsx';
+import FormworkDrawings from '../components/FormworkDrawings.jsx';
 
 const TABS = [
+  { key: 'bim', name: '◈ BIM markazi' },
+  { key: 'drawings', name: '📋 Ishchi chizmalar' },
   { key: 'plan', name: '📐 Reja (2D)' },
   { key: 'floors', name: '🏢 Qavatlar' },
   { key: 'materials', name: '🧱 Materiallar va narx' },
@@ -20,7 +24,7 @@ const TABS = [
 export default function Project({ onUnauthorized }) {
   const { id } = useParams();
   const [p, setP] = useState(null);
-  const [tab, setTab] = useState('plan');
+  const [tab, setTab] = useState('bim');
   const [error, setError] = useState('');
 
   const load = () => api.getProject(id).then(setP).catch((e) => {
@@ -64,6 +68,8 @@ export default function Project({ onUnauthorized }) {
         ))}
       </div>
 
+      {tab === 'bim' && <BimCoordination project={p} onSaved={setP} onUnauthorized={onUnauthorized} />}
+      {tab === 'drawings' && <FormworkDrawings project={p} />}
       {tab === 'plan' && <PlanViewer2D plan={p.plan} />}
       {tab === 'floors' && <FloorsPanel project={p} onSaved={setP} onUnauthorized={onUnauthorized} />}
       {tab === 'materials' && <MaterialsPanel project={p} onSaved={setP} onUnauthorized={onUnauthorized} />}

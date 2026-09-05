@@ -21,7 +21,7 @@ const run = promisify(execFile);
 // ============================================================
 
 export const SUPPORTED_EXT = new Set([
-  '.dxf', '.png', '.jpg', '.jpeg', '.webp', '.pdf', '.docx', '.xlsx', '.txt', '.csv',
+  '.dxf', '.ifc', '.png', '.jpg', '.jpeg', '.webp', '.pdf', '.docx', '.xlsx', '.txt', '.csv',
   // DWG binar format — o'qib bo'lmaydi, lekin qabul qilinadi: foydalanuvchiga
   // "DXF ga saqlang" degan aniq ko'rsatma beriladi (jim rad etishdan yaxshiroq)
   '.dwg'
@@ -30,6 +30,7 @@ export const SUPPORTED_EXT = new Set([
 export function fileKind(nameOrExt) {
   const ext = (nameOrExt.startsWith('.') ? nameOrExt : path.extname(nameOrExt)).toLowerCase();
   if (ext === '.dxf') return 'dxf';
+  if (ext === '.ifc') return 'ifc';
   if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) return 'image';
   if (ext === '.pdf') return 'pdf';
   if (ext === '.docx') return 'docx';

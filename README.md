@@ -6,7 +6,8 @@ Chizma yuklash → AI/geometrik tahlil → **MINAR qolip spetsifikatsiyasi va sm
 
 | Modul | Tavsif |
 |---|---|
-| 📥 **Ko'p faylli yuklash** | Bir vaqtda 20 tagacha hujjat: DXF, PDF, JPG/PNG/WEBP, DOCX, XLSX, TXT/CSV — sudrab tashlash bilan |
+| ◈ **BIM koordinatsiya markazi** | Loyiha manbalari, IFC/DXF almashuv modellari, reviziya holati va AR/KR/MEP koordinatsiya masalalari bitta CDE panelida |
+| 📥 **Ko'p faylli yuklash** | Bir vaqtda 20 tagacha hujjat: IFC, DXF/DWG, PDF, JPG/PNG/WEBP, DOCX, XLSX, TXT/CSV — sudrab tashlash bilan |
 | 📖 **Hujjatlarni birga o'qish** | Chizmadan geometriya, PDF/DOCX/XLSX matnidan qavatlar, balandliklar va gabarit; hammasi bitta tahlilda birlashtiriladi |
 | 📏 **Masshtab** | Birlik DXF sarlavhasidagi `$INSUNITS` dan olinadi; bo'lmasa gabarit bo'yicha taxmin qilinadi va foydalanuvchi mm/sm/m ni qo'lda tanlashi mumkin |
 | 🤖 **AI tahlil** | Rasm chizmadan AI devor/eshik/deraza/xonalarni aniqlaydi (OpenAI-mos API); DXF uchun geometrik tahlil |
@@ -16,6 +17,7 @@ Chizma yuklash → AI/geometrik tahlil → **MINAR qolip spetsifikatsiyasi va sm
 | ⚖ **Ikki tizim taqqoslashi** | Bitta loyiha uchun **мелкощитовая (КМО)** va **крупнощитовая (ЩЛ)** to'liq va alohida hisoblanadi; taqqoslash jadvali (panel, og'irlik, muddat, summa) va har birining o'z bo'limi + oraliq jami. Tanlangan variant bosh ko'rsatkichlarga, 5D ga va PDF ga tushadi |
 | 💰 **Sotib olish / arenda** | Har pozitsiya uchun narx; arenda oylik tarif × oylar bo'yicha hisoblanadi; har qatorda narxni qo'lda kiritish mumkin |
 | 🏗 **5D ko'rish** | Ko'p qavatli 3D model vaqt jadvali bo'yicha qurilib boradi; qavat tanlash; PNG snapshot |
+| 📋 **Ishchi chizmalar** | Har tashqi devor uchun panel markasi, ochiqlik, tyaga, tekislovchi balka, podkos qadami va o'lchamlari; SVG hamda qatlamli DXF eksport |
 | 🥽 **VR/AR** | WebXR (VR qo'lqoyni / ARCore telefon) — bino ichida yurish |
 | 💬 **AI yordamchi** | Loyiha kontekstida qolip bo'yicha maslahat (chat) |
 
@@ -41,11 +43,22 @@ npm start          # http://localhost:3001 da ham API, ham UI
 | Format | Nima olinadi |
 |---|---|
 | `.dxf` | Devor geometriyasi, xonalar, ochiqliklar, ustunlar (aniq o'lchamda) |
+| `.ifc` | OpenBIM almashuv modeli: IFC sxemasi va asosiy elementlar tekshiriladi, model reviziyasi BIM markazida saqlanadi |
 | `.pdf` | Sahifalar rasmga o'giriladi (AI ko'rish uchun) + matn (`pdftotext`) |
 | `.jpg .png .webp` | Chizma rasmi — AI vision o'qiydi |
 | `.docx` | Word matni: qavatlar, balandliklar, texnik talablar |
 | `.xlsx` | Excel jadvali: spetsifikatsiya, o'lchamlar |
 | `.txt .csv` | Oddiy matn |
+
+### Revit, AutoCAD va BIM ish oqimi
+
+Platforma native formatni soxta tarzda to'liq o'qilgan deb ko'rsatmaydi. Ishchi almashuv oqimi:
+
+`Revit (IFC4/DXF export) → ArxAI BIM markazi → hisob, 5D va koordinatsiya masalalari`
+
+`AutoCAD (DXF export) → aniq 2D geometriya va qolip hisobi`
+
+`.rvt` va `.dwg` fayllari manba/arxiv sifatida biriktirilishi mumkin; server tomonda haqiqiy model geometriyasi uchun IFC yoki DXF kerak. Native RVT viewer uchun keyingi production integratsiya Autodesk APS (OAuth, Model Derivative API) ulanishini talab qiladi.
 
 Bir so'rovda **20 tagacha** fayl, har biri 30 MB gacha. Geometriya manbai sifatida DXF ustun
 turadi; DXF bo'lmasa AI rasm tahlilidan foydalaniladi. Qavatlar avval AI dan, u bo'lmasa

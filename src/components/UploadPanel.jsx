@@ -5,10 +5,10 @@ import { api } from '../api.js';
 // Fayllar birga tahlil qilinadi, natija tasdiqlangach loyiha yaratiladi.
 
 const KIND_ICON = {
-  dxf: '📐', image: '🖼', pdf: '📕', docx: '📄', xlsx: '📊', text: '📝', cad: '⚠', other: '📎'
+  dxf: '📐', ifc: '🏗', image: '🖼', pdf: '📕', docx: '📄', xlsx: '📊', text: '📝', cad: '⚠', other: '📎'
 };
 const KIND_NAME = {
-  dxf: 'AutoCAD chizma', image: 'Rasm', pdf: 'PDF hujjat',
+  dxf: 'AutoCAD chizma', ifc: 'OpenBIM model', image: 'Rasm', pdf: 'PDF hujjat',
   docx: 'Word hujjat', xlsx: 'Excel jadval', text: 'Matn', cad: 'AutoCAD DWG', other: 'Boshqa'
 };
 
@@ -27,6 +27,7 @@ const UNITS = [
 const kindOf = (name) => {
   const ext = '.' + (name.split('.').pop() || '').toLowerCase();
   if (ext === '.dxf') return 'dxf';
+  if (ext === '.ifc') return 'ifc';
   if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) return 'image';
   if (ext === '.pdf') return 'pdf';
   if (ext === '.docx') return 'docx';
@@ -80,7 +81,7 @@ export default function UploadPanel({ onCreated, onUnauthorized }) {
         units: units === 'auto' ? undefined : units,
         scheme
       });
-      setResult(r);
+      setResult({ ...r, uploadedFiles: up.files });
       setBusy('');
     } catch (e) {
       setBusy('');
@@ -98,7 +99,8 @@ export default function UploadPanel({ onCreated, onUnauthorized }) {
     setBusy('Loyiha yaratilmoqda va hisoblanmoqda...');
     try {
       const p = await api.createProject(
-        result.plan.meta?.name || 'Yangi loyiha', result.plan, undefined, scheme, result.etalon
+        result.plan.meta?.name || 'Yangi loyiha', result.plan, undefined, scheme, result.etalon,
+        result.uploadedFiles?.map((f) => f.fileId)
       );
       onCreated(p);
     } catch (e) {
@@ -112,7 +114,7 @@ export default function UploadPanel({ onCreated, onUnauthorized }) {
     addFiles(e.dataTransfer?.files);
   };
 
-  const accept = caps?.formats?.join(',') || '.dxf,.pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.txt,.csv';
+  const accept = caps?.formats?.join(',') || '.ifc,.dxf,.dwg,.pdf,.png,.jpg,.jpeg,.webp,.docx,.xlsx,.txt,.csv';
 
   return (
     <div>
@@ -132,7 +134,7 @@ export default function UploadPanel({ onCreated, onUnauthorized }) {
         <div style={{ fontSize: 28, marginBottom: 4 }}>📥</div>
         <b>Hujjatlarni bu yerga tashlang yoki bosing</b>
         <div className="small-muted" style={{ marginTop: 6, lineHeight: 1.7 }}>
-          Bir vaqtda <b>20 tagacha</b> fayl: AutoCAD chizmasi (DXF), PDF loyiha, chizma rasmi (JPG/PNG),
+          Bir vaqtda <b>20 tagacha</b> fayl: OpenBIM (IFC), AutoCAD (DXF/DWG), PDF loyiha, chizma rasmi (JPG/PNG),
           Word (DOCX) va Excel (XLSX) hujjatlari, matn fayllari.<br />
           Barchasi <b>birga</b> o‘qiladi — chizmadan geometriya, hujjatlardan qavatlar va o‘lchamlar olinadi.
         </div>

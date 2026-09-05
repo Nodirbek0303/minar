@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { VRButton } from 'three/addons/webxr/VRButton.js';
 import {
-  MINAR, layoutWallFaceWithOpenings, openingsOfWall, exteriorWallsOf,
+  MINAR, layoutWallFace, layoutWallFaceWithOpenings, openingsOfWall, exteriorWallsOf,
   columnJunctions, COLUMN_SIZE, FORMWORK_NORMS
 } from '../../shared/formwork.js';
 import { createRenderer, watchContextLoss } from '../lib/webgl.js';
@@ -22,7 +22,9 @@ function minarTexture(wMm, hMm, colorHex) {
   ctx.fillStyle = colorHex;
   ctx.fillRect(0, 0, W, H);
   const fw = Math.max(12, Math.round(W * 0.085)), fh = Math.max(10, Math.round(H * 0.06));
-  ctx.fillStyle = '#232327';
+  // Qolip yuzasi qorong‘i devorga singib ketmasligi uchun po‘lat panelning
+  // markaziy maydoni ko‘rinadigan grafit rangda chiziladi.
+  ctx.fillStyle = '#687581';
   ctx.fillRect(fw, fh, W - fw * 2, H - fh * 2);
   ctx.strokeStyle = 'rgba(255,255,255,0.045)';
   ctx.lineWidth = 1;
@@ -159,6 +161,14 @@ export default function Viewer5D({ project }) {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controls.enableZoom = true;
+    controls.enablePan = true;
+    controls.screenSpacePanning = true;
+    controls.rotateSpeed = 0.85;
+    controls.zoomSpeed = 1.15;
+    controls.panSpeed = 0.9;
+    controls.minDistance = 1.5;
+    controls.maxDistance = 180;
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     const sun = new THREE.DirectionalLight(0xfff2d9, 1.2);
@@ -189,8 +199,11 @@ export default function Viewer5D({ project }) {
     const totalH = flDef.reduce((s, f) => s + f.height, 0);
     const elevStart = flDef[0]?.underground ? -flDef[0].height : 0; // podval yer ostidan
     // devorlar to3() orqali markazlashtiriladi (0,0) atrofida — kamera ham shu markazga qaraydi
-    camera.position.set(ext * 1.0, totalH * 0.9 + ext * 0.45, ext * 1.35);
-    controls.target.set(0, (elevStart + totalH) / 2, 0);
+    camera.position.set(ext * 0.72, totalH * 0.58 + ext * 0.25, ext * 0.95);
+    controls.target.set(0, elevStart + totalH * 0.42, 0);
+    controls.update();
+    const homeCamera = camera.position.clone();
+    const homeTarget = controls.target.clone();
 
     const to3 = (x, y) => new THREE.Vector3(x - cx, 0, y - cz);
     const stagger = () => Math.random();
@@ -267,9 +280,11 @@ export default function Viewer5D({ project }) {
             // MINAR qolip panellari — katalog o'lchamlari bilan aniq sxema
             const colorHex = (MINAR.colors.find((c) => c.id === (fl.formwork.color || 'RAL3020')) || MINAR.colors[0]).hex;
             // Server bilan BIR XIL joylashuv: ochiqliklar (eshik/deraza) o'rniga panel qo'yilmaydi
-            const face = layoutWallFaceWithOpenings({
-              type: fwType, lenM: len, hM: H, openings: openingsOfWall(plan, w, H)
-            });
+            const wallOpenings = openingsOfWall(plan, w, H);
+            // Foydalanuvchi talabi: deraza/eshiklar panel sxemasidan
+            // ajratilmaydi. Butun devor yuzi bitta uzluksiz katalog panellari
+            // bilan yopiladi; proyom geometriyasi devor qatlamida qoladi.
+            const face = layoutWallFaceWithOpenings({ type: fwType, lenM: len, hM: H, openings: [] });
             for (const seg of face.segments) {
               let yCur = elev + seg.y;
               for (const row of seg.rowPlans) {
@@ -283,11 +298,16 @@ export default function Viewer5D({ project }) {
                     const mat = track(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.5, metalness: 0.1, transparent: true }));
                     const mesh = new THREE.Mesh(track(new THREE.BoxGeometry(wM - 0.004, hM - 0.004, 0.055)), mat);
                     const p = a.clone().add(u.clone().multiplyScalar(tCur + wM / 2));
-                    mesh.position.set(p.x, yCur + hM / 2, p.z).add(n.clone().multiplyScalar(extSign * (w.thickness / 2 + 0.035)));
-                    mesh.rotation.y = -ang;
-                    mesh.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi };
-                    scene.add(mesh);
-                    panelMeshes.push(mesh);
+                    // Qolip devorning IKKALA yuzasiga qo'yiladi. Hisobdagi
+                    // FACES=2 endi 3D ko'rinishda ham real ko'rinadi.
+                    for (const side of [extSign, -extSign]) {
+                      const sideMesh = side === extSign ? mesh : new THREE.Mesh(track(new THREE.BoxGeometry(wM - 0.004, hM - 0.004, 0.055)), track(mat.clone()));
+                      sideMesh.position.set(p.x, yCur + hM / 2, p.z).add(n.clone().multiplyScalar(side * (w.thickness / 2 + 0.035)));
+                      sideMesh.rotation.y = -ang;
+                      sideMesh.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi, face: side === extSign ? 'outer' : 'inner' };
+                      scene.add(sideMesh);
+                      panelMeshes.push(sideMesh);
+                    }
                     tCur += wM;
                   }
                 }
@@ -307,14 +327,16 @@ export default function Viewer5D({ project }) {
               const hMat = new THREE.MeshStandardMaterial({ color: 0x55575c, metalness: 0.75, roughness: 0.3, transparent: true });
               const hDir = u.clone().normalize();
               const hQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), hDir);
-              const hMid = mid.clone().add(n.clone().multiplyScalar(tubeOff + 0.005));
-              for (const by of boundaries) {
-                const hTube = new THREE.Mesh(hGeo, track(hMat.clone()));
-                hTube.position.set(hMid.x, elev + by, hMid.z);
-                hTube.quaternion.copy(hQuat);
-                hTube.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi };
-                scene.add(hTube);
-                panelMeshes.push(hTube);
+              for (const side of [extSign, -extSign]) {
+                const hMid = mid.clone().add(n.clone().multiplyScalar(side * (w.thickness / 2 + 0.035 + 0.055 + 0.035) + side * 0.005));
+                for (const by of boundaries) {
+                  const hTube = new THREE.Mesh(hGeo, track(hMat.clone()));
+                  hTube.position.set(hMid.x, elev + by, hMid.z);
+                  hTube.quaternion.copy(hQuat);
+                  hTube.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi, face: side === extSign ? 'outer' : 'inner' };
+                  scene.add(hTube);
+                  panelMeshes.push(hTube);
+                }
               }
             }
             // Push-pull tirgaklar — qolip TASHQARISIDA qiyalik tayanch:
@@ -370,9 +392,12 @@ export default function Viewer5D({ project }) {
             const tieRows = Math.max(1, Math.round(H / FORMWORK_NORMS.TYAGA_ROW_STEP_M));
             const tieCols = Math.max(1, Math.ceil(len / FORMWORK_NORMS.TYAGA_STEP_M));
             const tieMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4e, metalness: 0.7, roughness: 0.35, transparent: true });
+            const anchorMat = new THREE.MeshStandardMaterial({ color: 0xc9ccd4, metalness: 0.85, roughness: 0.28, transparent: true });
+            const nutMat = new THREE.MeshStandardMaterial({ color: 0xd8d44a, metalness: 0.9, roughness: 0.25, transparent: true });
             const yAxis = new THREE.Vector3(0, 1, 0);
             const tieDir = n.clone().multiplyScalar(extSign).normalize();
             const tieQuat = new THREE.Quaternion().setFromUnitVectors(yAxis, tieDir);
+            const nutQuat = tieQuat.clone();
             for (let r2 = 0; r2 < tieRows; r2++) {
               for (let c2 = 0; c2 < tieCols; c2++) {
                 const ty = elev + ((r2 + 0.5) / tieRows) * H;
@@ -384,6 +409,20 @@ export default function Viewer5D({ project }) {
                 tie.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi };
                 scene.add(tie);
                 panelMeshes.push(tie);
+                // Har bir yuzada: anker boshi + shayba + olti qirrali gayka.
+                // Bu elementlar tayrotning ikki uchida, panel tashqi sirtida turadi.
+                for (const side of [extSign, -extSign]) {
+                  const face = p.clone().add(n.clone().multiplyScalar(side * (w.thickness / 2 + 0.06)));
+                  const bolt = new THREE.Mesh(track(new THREE.CylinderGeometry(0.018, 0.018, 0.11, 12)), track(anchorMat.clone()));
+                  bolt.position.copy(face).add(n.clone().multiplyScalar(side * 0.055)); bolt.quaternion.copy(nutQuat);
+                  bolt.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi, anchor: true, face: side === extSign ? 'outer' : 'inner' }; scene.add(bolt); panelMeshes.push(bolt);
+                  const washer = new THREE.Mesh(track(new THREE.CylinderGeometry(0.045, 0.045, 0.012, 16)), track(anchorMat.clone()));
+                  washer.position.copy(face).add(n.clone().multiplyScalar(side * 0.115)); washer.quaternion.copy(nutQuat);
+                  washer.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi, washer: true }; scene.add(washer); panelMeshes.push(washer);
+                  const nut = new THREE.Mesh(track(new THREE.CylinderGeometry(0.032, 0.032, 0.045, 6)), track(nutMat.clone()));
+                  nut.position.copy(face).add(n.clone().multiplyScalar(side * 0.145)); nut.quaternion.copy(nutQuat);
+                  nut.userData = { f: stagger(), phase: 'walls', fw: true, floor: fi, nut: true }; scene.add(nut); panelMeshes.push(nut);
+                }
               }
             }
           } else {
@@ -537,7 +576,11 @@ export default function Viewer5D({ project }) {
     // --- animatsiya tsikli ---
     const clock = new THREE.Clock();
     const state = { day: totalDays, playing: false };
-    stateRef.current = { state, setDay, applyDay, renderOnce: () => renderer.render(scene, camera) };
+    stateRef.current = {
+      state, setDay, applyDay, renderOnce: () => renderer.render(scene, camera),
+      zoom: (factor) => { camera.position.sub(controls.target).multiplyScalar(factor).add(controls.target); controls.update(); },
+      resetView: () => { camera.position.copy(homeCamera); controls.target.copy(homeTarget); controls.update(); }
+    };
     const tick = () => {
       const dt = clock.getDelta();
       if (state.playing) {
@@ -664,6 +707,10 @@ export default function Viewer5D({ project }) {
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <button className="btn small" disabled={!!glError} onClick={() => setPlaying((p) => !p)}>{playing ? '⏸ To‘xtatish' : '▶ Qurilishni boshlash'}</button>
+          <span className="small-muted">Kamera:</span>
+          <button className="btn small secondary" disabled={!!glError} onClick={() => stateRef.current?.zoom?.(0.72)} title="Yaqinlashtirish">＋</button>
+          <button className="btn small secondary" disabled={!!glError} onClick={() => stateRef.current?.zoom?.(1.38)} title="Uzoqlashtirish">−</button>
+          <button className="btn small secondary" disabled={!!glError} onClick={() => stateRef.current?.resetView?.()} title="Boshlang‘ich ko‘rinish">⌂</button>
           <button
             className="btn small secondary"
             disabled={!!glError}
@@ -714,7 +761,7 @@ export default function Viewer5D({ project }) {
           variantni almashtirsangiz, chizma ham o'sha panellar bilan qayta quriladi.<br />
           Standart qoida: qolip <b>faqat podval va 1-qavatga</b> qo'yiladi — qavat soni qancha bo'lishidan qat'i nazar.
           Yuqori qavatlar 3D dan yashiriladi; butun binoni ko'rish uchun "Faqat qolip qavatlari" belgisini oling.
-          Qavatni tanlasangiz, boshqa qavatlar shaffof bo'lib, shu qavatning apalka joylashuvi yaqqol ko'rinadi.
+          Qavatni tanlasangiz, boshqa qavatlar shaffof bo‘lib, shu qavatning apalka joylashuvi yaqqol ko‘rinadi. Sichqoncha chap tugmasi bilan aylantiring, g‘ildirak bilan zoom qiling, o‘ng tugma bilan suring; ＋/− va ⌂ tugmalari ham bor.
           🥽 <b>VR rejimi:</b> HTTPS orqali ochib VR qo'lqoynini ulang.
         </p>
       </div>

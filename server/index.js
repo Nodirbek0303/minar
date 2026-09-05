@@ -51,7 +51,7 @@ const upload = multer({
     const ext = path.extname(file.originalname).toLowerCase();
     if (!ALLOWED_EXT.has(ext)) {
       return cb(new ValidationError(
-        'Qo‘llanmaydigan format: ' + ext + '. Mumkin: DXF, PDF, JPG, PNG, WEBP, DOCX, XLSX, TXT, CSV'));
+        'Qo‘llanmaydigan format: ' + ext + '. Mumkin: IFC, DXF, DWG, PDF, JPG, PNG, WEBP, DOCX, XLSX, TXT, CSV'));
     }
     cb(null, true);
   }
@@ -164,6 +164,44 @@ function validateEtalon(e) {
   };
 }
 
+// BIM markaziga biriktirilgan manba fayllari. RVT/DWG native formatlari
+// saqlanadi va versiyalanadi, ammo brauzerda ishonchli geometriya uchun IFC/DXF
+// almashuv formati talab qilinadi. Bu "ochildi" degan soxta va'dadan saqlaydi.
+function buildBimModels(sourceFiles) {
+  if (!Array.isArray(sourceFiles)) return [];
+  return sourceFiles.slice(0, 20).map((item, i) => {
+    const f = db.getFile(typeof item === 'string' ? item : item?.fileId);
+    if (!f) return null;
+    const ext = path.extname(f.name).slice(1).toUpperCase();
+    const discipline = f.type === 'ifc' ? 'BIM / IFC' : f.type === 'dxf' || f.type === 'cad' ? 'CAD' : 'Hujjat';
+    const state = f.type === 'ifc' || f.type === 'dxf' ? 'ready' : f.type === 'cad' ? 'exchange_required' : 'reference';
+    return {
+      id: 'model-' + Date.now().toString(36) + '-' + i,
+      fileId: f.id, name: f.name, format: ext || 'FILE', discipline, state,
+      revision: 'P01', createdAt: new Date().toISOString()
+    };
+  }).filter(Boolean);
+}
+
+function validateBim(bim) {
+  if (!bim || typeof bim !== 'object') return null;
+  const models = Array.isArray(bim.models) ? bim.models.slice(0, 30).map((m, i) => ({
+    id: String(m.id || 'model-' + i).slice(0, 60), fileId: String(m.fileId || '').slice(0, 80),
+    name: String(m.name || 'Model').slice(0, 160), format: String(m.format || 'FILE').slice(0, 16),
+    discipline: String(m.discipline || 'BIM').slice(0, 40),
+    state: ['ready', 'reference', 'exchange_required', 'processing'].includes(m.state) ? m.state : 'reference',
+    revision: String(m.revision || 'P01').slice(0, 30), createdAt: m.createdAt || new Date().toISOString()
+  })) : [];
+  const issues = Array.isArray(bim.issues) ? bim.issues.slice(0, 200).map((x, i) => ({
+    id: String(x.id || 'issue-' + i).slice(0, 60), title: String(x.title || 'Koordinatsiya masalasi').slice(0, 160),
+    discipline: String(x.discipline || 'Umumiy').slice(0, 40),
+    status: ['open', 'in_progress', 'resolved'].includes(x.status) ? x.status : 'open',
+    priority: ['low', 'normal', 'high'].includes(x.priority) ? x.priority : 'normal',
+    createdAt: x.createdAt || new Date().toISOString()
+  })) : [];
+  return { models, issues, updatedAt: new Date().toISOString() };
+}
+
 // ---------- Ko'p hujjatli tahlil ----------
 // Barcha yuklangan fayllar BIRGA o'qiladi: DXF dan aniq geometriya,
 // rasm va PDF sahifalaridan AI vision, DOCX/XLSX/TXT dan matn konteksti.
@@ -204,6 +242,21 @@ app.post('/api/analyze-batch', async (req, res, next) => {
           name: f.name, kind, role: role.id, roleTitle: role.title, ok: false,
           info: 'DWG binar format — AutoCAD da "Save As → DXF" qilib qayta yuklang'
         });
+        continue;
+      }
+
+      // IFC — openBIM almashuv modeli. Ushbu versiyada geometriyani IFC
+      // viewer emas, DXF/AI reja hisobga oladi; ammo model tarkibi tekshirilib,
+      // koordinatsiya markaziga loyiha manbasi sifatida biriktiriladi.
+      if (kind === 'ifc') {
+        const raw = await fs.promises.readFile(full, 'utf8');
+        const schema = /FILE_SCHEMA\s*\(\s*\(?'([^')]+)'?/i.exec(raw)?.[1] || 'IFC';
+        const walls = (raw.match(/IFCWALL(?:STANDARDCASE)?\s*\(/gi) || []).length;
+        const slabs = (raw.match(/IFCSLAB\s*\(/gi) || []).length;
+        const columns = (raw.match(/IFCCOLUMN\s*\(/gi) || []).length;
+        if (!/ISO-10303-21/i.test(raw.slice(0, 2000))) throw new Error('IFC STEP sarlavhasi topilmadi');
+        report.push({ name: f.name, kind, role: 'bim', roleTitle: 'OpenBIM model', ok: true,
+          info: `${schema}: ${walls} devor, ${slabs} plita, ${columns} ustun — BIM markaziga biriktirildi` });
         continue;
       }
 
@@ -405,6 +458,7 @@ app.post('/api/projects', (req, res, next) => {
       opts: { ...validateOpts({ wallMaterial }), rentMode: 'buy', rentMonths: 1 },
       variant: VARIANTS[req.body?.variant] ? req.body.variant : DEFAULT_VARIANT,
       etalon: validateEtalon(req.body?.etalon),
+      bim: { models: buildBimModels(req.body?.sourceFiles), issues: [], updatedAt: new Date().toISOString() },
       createdAt: new Date().toISOString()
     };
     recalcProject(p);
@@ -442,6 +496,7 @@ app.put('/api/projects/:id', (req, res, next) => {
     if (plan) p.plan = validatePlan(plan);
     if (priceOverrides) p.priceOverrides = validatePriceOverrides(priceOverrides);
     if (req.body?.etalon !== undefined) p.etalon = validateEtalon(req.body.etalon);
+    if (req.body?.bim !== undefined) p.bim = validateBim(req.body.bim);
     recalcProject(p);
     db.saveProject(p);
     res.json(p);

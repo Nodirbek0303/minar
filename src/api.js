@@ -47,8 +47,8 @@ export const api = {
   capabilities: () => req('/api/capabilities'),
   listProjects: () => req('/api/projects'),
   getProject: (id) => req('/api/projects/' + id),
-  createProject: (name, plan, wallMaterial, scheme, etalon) =>
-    req('/api/projects', { method: 'POST', body: JSON.stringify({ name, plan, wallMaterial, scheme, etalon }) }),
+  createProject: (name, plan, wallMaterial, scheme, etalon, sourceFiles) =>
+    req('/api/projects', { method: 'POST', body: JSON.stringify({ name, plan, wallMaterial, scheme, etalon, sourceFiles }) }),
   updateProject: (id, body) => req('/api/projects/' + id, { method: 'PUT', body: JSON.stringify(body) }),
   updateFloors: (id, floors) => req('/api/projects/' + id + '/floors', { method: 'PUT', body: JSON.stringify({ floors }) }),
   deleteProject: (id) => req('/api/projects/' + id, { method: 'DELETE' }),

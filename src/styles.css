@@ -104,7 +104,27 @@ select, input[type=text], input[type=number] {
   padding: 8px 10px; border-radius: 7px; font-size: 13px;
 }
 .split { display: grid; grid-template-columns: 1fr 380px; gap: 16px; }
+.section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.section-heading h2 { margin: 2px 0 0; font-size: 18px; }
+.eyebrow { color: var(--accent); font-size: 10px; text-transform: uppercase; font-weight: 700; letter-spacing: .12em; }
+.bim-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin: 18px 0; }
+.bim-metric { padding: 12px; border-right: 1px solid var(--border); min-width: 0; }
+.bim-metric:last-child { border: 0; }
+.bim-metric b { display: block; color: var(--accent); font-size: 18px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bim-metric b.ok { color: var(--ok); }.bim-metric b.warning { color: var(--accent); }
+.bim-metric span, .model-row small, .issue small { display: block; color: var(--muted); font-size: 11px; margin-top: 3px; }
+.model-table { border: 1px solid var(--border); border-radius: 9px; overflow: hidden; }
+.model-row { display: grid; grid-template-columns: minmax(160px, 2fr) .8fr .6fr 1fr; gap: 10px; align-items: center; padding: 11px 12px; border-top: 1px solid var(--border); font-size: 13px; }
+.model-row:first-child { border-top: 0; }.model-head { background: var(--panel2); color: var(--muted); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+.status { width: max-content; padding: 3px 7px; border: 1px solid var(--border); border-radius: 999px; font-size: 11px; color: var(--muted); }.status.ok { color: var(--ok); border-color: rgba(63,185,80,.5); }.status.warning { color: var(--accent); border-color: rgba(245,166,35,.5); }
+.integration-note { margin-top: 14px; background: rgba(47,129,247,.08); border-left: 3px solid var(--accent2); padding: 10px 12px; color: var(--muted); font-size: 12px; line-height: 1.6; }
+.issue-form { display: grid; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }.issue-form input { width: 100%; }.issue-form > div { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }.issue-form select { min-width: 0; width: 100%; }.issue-form .btn { width: 100%; }
+.issue-list { display: grid; gap: 8px; margin-top: 12px; max-height: 430px; overflow: auto; }.issue { display: flex; gap: 8px; align-items: flex-start; justify-content: space-between; padding: 10px; background: var(--panel2); border: 1px solid var(--border); border-radius: 8px; font-size: 12px; }.issue b { display: block; margin-top: 5px; line-height: 1.35; }.issue select { font-size: 11px; padding: 5px; }.priority { font-size: 10px; color: var(--muted); }.priority.high { color: var(--danger); }.priority.low { color: var(--ok); }.empty-state { padding: 20px 12px; text-align: center; color: var(--muted); font-size: 12px; }
+.drawing-layout { display: grid; grid-template-columns: minmax(0, 1fr) 290px; gap: 16px; align-items: start; }.drawing-toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }.drawing-toolbar label { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }.drawing-canvas { overflow: auto; background: #d6dce5; padding: 12px; border-radius: 8px; }.drawing-canvas svg { display: block; width: 100%; min-width: 820px; height: auto; box-shadow: 0 3px 16px rgba(0,0,0,.25); }.drawing-notes h3 { margin: 4px 0 12px; font-size: 17px; }.note-row { display: flex; justify-content: space-between; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px; }.note-row b { color: var(--text); text-align: right; }.drawing-notes hr { border: 0; border-top: 1px solid var(--border); margin: 14px 0; }
+.plan-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:8px; }.plan-toolbar .badge { margin-left:auto; }.wall-register { margin-top:12px; }.table-scroll { overflow:auto; }.wall-register tr { cursor:pointer; }.wall-register tr:hover td, .wall-register tr.selected-row td { background:rgba(245,166,35,.10); }.wall-register td { white-space:nowrap; }
 @media (max-width: 1000px) { .split { grid-template-columns: 1fr; } }
+@media (max-width: 1000px) { .drawing-layout { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .bim-kpis { grid-template-columns: repeat(2, 1fr); }.bim-metric:nth-child(2) { border-right: 0; }.bim-metric:nth-child(n+3) { border-top: 1px solid var(--border); }.model-row { grid-template-columns: minmax(120px, 1.5fr) .7fr .8fr; }.model-row > :nth-child(3) { display: none; }.model-head > :nth-child(3) { display: none; } }
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
 
