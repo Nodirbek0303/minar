@@ -121,6 +121,23 @@ node tools/ai-aniqlik.mjs <papka>    # AI ni o'lchash (kalit kerak)
 IFC modelidan geometriya olinadi (to'g'ri javob aniq ma'lum), undan
 qurilish chizmasiga o'xshash rasm chiziladi. Litsenziya toza.
 
+**2026-09-05 holati** (5 chizma, `claude-opus-5`):
+
+| Chizma | Devor | Topildi | Uzunlik farqi |
+|---|---|---|---|
+| TallBuilding | 6 | **100%** | 2,9% |
+| BasicHouse | 13 | 38,5% | 6,6% |
+| ManySimpleWalls | 3 | 33,3% | 0,8% |
+| LargeBuilding | 14 | 28,6% | 4,4% |
+| AdvancedProject | 90 | 3,3% | −37,4% |
+| **O'rtacha** | | **40,7%** | **10,4%** |
+
+Muhim xulosa: **umumiy uzunlik farqi atigi 10,4%**, ya'ni AI binoning
+umumiy o'lchamini yaxshi oladi, lekin har devorni boshqacha joylashtiradi.
+Murakkab chizmada (90 devor) esa aniqlik keskin tushadi — shuning uchun
+geometriya manbai sifatida DXF va IFC ustun turadi, AI esa ular
+bo'lmagandagina ishlatiladi.
+
 ### Haqiqiy binolar kutubxonasi
 
 OpenStreetMap dan O'zbekiston binolari (ODbL). 1 633 924 konturdan qolip

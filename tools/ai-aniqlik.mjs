@@ -44,7 +44,12 @@ for (const png of pngs.sort()) {
     const buf = fs.readFileSync(path.join(dir, png));
     const got = await analyzeImage(buf.toString('base64'));
     const secs = ((Date.now() - t0) / 1000).toFixed(1);
-    const cmp = comparePlans(truth, { walls: got.walls || [] });
+    // AI javobini saqlaymiz: keyingi tahlil uchun qayta chaqirish
+    // (va pul sarflash) shart bo'lmasin
+    fs.writeFileSync(path.join(dir, base + '.ai.json'), JSON.stringify(got, null, 1));
+    // analyzeImage javobni `plan` ichida qaytaradi
+    const gotPlan = got.plan || got;
+    const cmp = comparePlans(truth, { walls: gotPlan.walls || [] });
     rows.push({ base, cmp });
     console.log(`${secs}s  ${describe(cmp)}`);
   } catch (e) {

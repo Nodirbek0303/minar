@@ -75,8 +75,24 @@ const lenOf = (w) => Math.hypot(w.b[0] - w.a[0], w.b[1] - w.a[1]);
  * Ikkita planni solishtiradi. `truth` — haqiqiy, `got` — o'qilgani.
  * Devorlar joyi va uzunligi bo'yicha juftlanadi.
  */
-export function comparePlans(truth, got, { tol = 1.0 } = {}) {
-  const T = truth?.walls || [], G = got?.walls || [];
+// Ikkita plan har xil koordinata boshida bo'lishi mumkin: IFC modeli
+// bino qayerda turganini saqlaydi, AI esa rasmdan o'qib markazni (0,0)
+// deb oladi. Solishtirishdan oldin ikkalasi ham markazlashtiriladi -
+// aks holda to'g'ri o'qilgan plan ham 0% ko'rsatadi.
+function centred(walls) {
+  if (!walls.length) return walls;
+  const xs = walls.flatMap((w) => [w.a[0], w.b[0]]);
+  const ys = walls.flatMap((w) => [w.a[1], w.b[1]]);
+  const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+  const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+  return walls.map((w) => ({
+    ...w, a: [w.a[0] - cx, w.a[1] - cy], b: [w.b[0] - cx, w.b[1] - cy]
+  }));
+}
+
+export function comparePlans(truth, got, { tol = 1.0, centre = true } = {}) {
+  const T = centre ? centred(truth?.walls || []) : (truth?.walls || []);
+  const G = centre ? centred(got?.walls || []) : (got?.walls || []);
   const used = new Set();
   let matched = 0, lenError = 0;
   for (const t of T) {

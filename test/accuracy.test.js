@@ -147,3 +147,19 @@ test('to\'g\'ri sozlamada ogohlantirish yo\'q', () => {
   process.env.AI_API_KEY = old.k ?? '';
   process.env.AI_BASE_URL = old.u ?? '';
 });
+
+test('har xil koordinata boshi natijani buzmaydi', () => {
+  // IFC modeli bino qayerda turganini saqlaydi, AI esa rasmdan o'qib
+  // markazni (0,0) deb oladi. Markazlashtirmasak to'g'ri o'qilgan plan
+  // ham 0% ko'rsatadi - o'lchov yolg'on gapiradi.
+  const truth = plan([w('1', 0, 0, 10, 0), w('2', 10, 0, 10, 8)]);
+  const surilgan = plan([w('a', 100, 50, 110, 50), w('b', 110, 50, 110, 58)]);
+  const c = comparePlans(truth, surilgan);
+  assert.equal(c.recallPct, 100);
+});
+
+test('markazlashtirishni o\'chirish mumkin', () => {
+  const truth = plan([w('1', 0, 0, 10, 0)]);
+  const surilgan = plan([w('a', 100, 50, 110, 50)]);
+  assert.equal(comparePlans(truth, surilgan, { centre: false }).matched, 0);
+});
